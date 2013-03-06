@@ -3,10 +3,14 @@ fhcore
 
 Core arduino code providing floathub functionality
 
-To build and upload to an arduino/floathub board;
+You need a working arduino development environment, but thisproject is
+intended to be built on the command line. It uses the arduino-mk file
+developped by (http://ed.am/dev/make/arduino-mk). 
 
-	1. Select the relevant Makefile for your environment (.linux, .osx, etc.)
+To build, type:
 
-	2. Type "make" to build the code 
+	make
 
-	3. Type "make upload" to upload avr code to arduino/floathub device connected via USB.
+To push hex code to arduino/floathub attached via usb, type:
+
+	make upload
