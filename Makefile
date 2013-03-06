@@ -1,60 +1,55 @@
-# Arduino makefile
+# fhcore makefile
 #
 # This makefile allows you to build sketches from the command line
 # without the Arduino environment (or Java).
 #
-# The Arduino environment does preliminary processing on a sketch before
-# compiling it.  If you're using this makefile instead, you'll need to do
-# a few things differently:
-#
-#   - Give your program's file a .cpp extension (e.g. foo.cpp).
-#
-#   - Put this line at top of your code: #include <WProgram.h>
-#
-#   - Write prototypes for all your functions (or define them before you
-#     call them).  A prototype declares the types of parameters a
-#     function will take and what type of value it will return.  This
-#     means that you can have a call to a function before the definition
-#     of the function.  A function prototype looks like the first line of
-#     the function, with a semi-colon at the end.  For example:
-#     int digitalRead(int pin);
-#
-# Instructions for using the makefile:
-#
-#  1. Copy this file into the folder with your sketch.
-#
-#  2. Below, modify the line containing "TARGET" to refer to the name of
-#     of your program's file without an extension (e.g. TARGET = foo).
-#
-#  3. Modify the line containg "ARDUINO" to point the directory that
-#     contains the Arduino core (for normal Arduino installations, this
-#     is the lib/targets/arduino sub-directory).
-#
-#  4. Modify the line containing "PORT" to refer to the filename
-#     representing the USB or serial connection to your Arduino board
-#     (e.g. PORT = /dev/tty.USB0).  If the exact name of this file
-#     changes, you can use * as a wildcard (e.g. PORT = /dev/tty.USB*).
-#
-#  5. At the command line, change to the directory containing your
-#     program's file and the makefile.
-#
-#  6. Type "make" and press enter to compile/verify your program.
-#
-#  7. Type "make upload", reset your Arduino board, and press enter  to
-#     upload your program to the Arduino board.
 #
 # $Id$
 
-PORT = /dev/tty.usbserial*
-TARGET = foo
-ARDUINO = /Applications/arduino-0005/lib/targets/arduino
-SRC = $(ARDUINO)/buffer.c $(ARDUINO)/pins_arduino.c \
-  $(ARDUINO)/Serial.c $(ARDUINO)/uart.c $(ARDUINO)/wiring.c
-CXXSRC = $(TARGET).cpp $(ARDUINO)/HardwareSerial.cpp $(ARDUINO)/WRandom.cpp
-MCU = atmega8
+#
+#	From watching the Java IDE do 
+#
+#-I/Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/cores/arduino
+#-I/Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/variants/mega
+#
+#	ibid
+# WInterrupts.c.o
+# wiring.c.o
+# wiring_analog.c.o
+# wiring_digital.c.o
+# wiring_pulse.c.o
+# wiring_shift.c.o
+# CDC.cpp.o
+# HardwareSerial.cpp.o
+# HID.cpp.o
+# IPAddress.cpp.o
+# main.cpp.o
+# new.cpp.o
+# Print.cpp.o
+# Stream.cpp.o
+# Tone.cpp.o
+# USBCore.cpp.o
+# WMath.cpp.o
+# WString.cpp.o
+
+
+PORT = /dev/tty.usbmodem*
+TARGET = fhcore
+ARDUINO = /Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/cores/arduino/
+MOREARDUINO = /Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/variants/mega
+
+#SRC = $(ARDUINO)/buffer.c $(ARDUINO)/pins_arduino.c $(ARDUINO)/Serial.c $(ARDUINO)/uart.c $(ARDUINO)/wiring.c
+SRC = $(ARDUINO)/WInterrupts.c $(ARDUINO)/wiring.c  $(ARDUINO)/wiring_analog.c $(ARDUINO)/wiring_digital.c \
+ 	$(ARDUINO)/wiring_pulse.c $(ARDUINO)/wiring_shift.c
+CXXSRC = $(TARGET).cpp $(ARDUINO)/HardwareSerial.cpp $(ARDUINO)/Print.cpp  \
+	$(ARDUINO)/CDC.cpp $(ARDUINO)/HID.cpp $(ARDUINO)/IPAddress.cpp $(ARDUINO)/main.cpp \
+	$(ARDUINO)/new.cpp $(ARDUINO)/Stream.cpp $(ARDUINO)/Tone.cpp $(ARDUINO)/USBCore.cpp \
+	$(ARDUINO)/WMath.cpp $(ARDUINO)/WString.cpp
+MCU = atmega2560
 F_CPU = 16000000
 FORMAT = ihex
-UPLOAD_RATE = 19200
+#UPLOAD_RATE = 19200
+UPLOAD_RATE = 115200
 
 # Name of this Makefile (used for "make depend").
 MAKEFILE = Makefile
@@ -71,7 +66,7 @@ CDEFS = -DF_CPU=$(F_CPU)
 CXXDEFS = -DF_CPU=$(F_CPU)
 
 # Place -I options here
-CINCS = -I$(ARDUINO)
+CINCS = -I$(ARDUINO) -I$(MOREARDUINO)
 CXXINCS = -I$(ARDUINO)
 
 # Compiler flag to set the C Standard level.
@@ -92,20 +87,22 @@ LDFLAGS =
 
 
 # Programming support using avrdude. Settings and variables.
-AVRDUDE_PROGRAMMER = stk500
+AVRDUDE_PROGRAMMER = wiring
 AVRDUDE_PORT = $(PORT)
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 AVRDUDE_FLAGS = -F -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) \
   -b $(UPLOAD_RATE)
 
 # Program settings
-CC = avr-gcc
-CXX = avr-g++
-OBJCOPY = avr-objcopy
-OBJDUMP = avr-objdump
+PROGLOCATION = /Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/bin
+CC = $(PROGLOCATION)/avr-gcc
+CXX = $(PROGLOCATION)/avr-g++
+OBJCOPY = $(PROGLOCATION)/avr-objcopy
+OBJDUMP = $(PROGLOCATION)/avr-objdump
 SIZE = avr-size
 NM = avr-nm
-AVRDUDE = avrdude
+#AVRDUDE = avrdude
+AVRDUDE = /Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/bin/avrdude -v -v -v -v -C/Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/etc/avrdude.conf
 REMOVE = rm -f
 MV = mv -f
 

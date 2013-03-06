@@ -2,3 +2,11 @@ fhcore
 ======
 
 Core arduino code providing floathub functionality
+
+To build and upload to an arduino/floathub board;
+
+	1. Select the relevant Makefile for your environment (.linux, .osx, etc.)
+
+	2. Type "make" to build the code 
+
+	3. Type "make upload" to upload avr code to arduino/floathub device connected via USB.

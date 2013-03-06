@@ -33,7 +33,7 @@
 # WString.cpp.o
 
 
-PORT = /dev/tty.usbserial*
+PORT = /dev/tty.usbmodem*
 TARGET = fhcore
 ARDUINO = /Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/cores/arduino/
 MOREARDUINO = /Applications/Arduino.app/Contents/Resources/Java/hardware/arduino/variants/mega
@@ -48,7 +48,8 @@ CXXSRC = $(TARGET).cpp $(ARDUINO)/HardwareSerial.cpp $(ARDUINO)/Print.cpp  \
 MCU = atmega2560
 F_CPU = 16000000
 FORMAT = ihex
-UPLOAD_RATE = 19200
+#UPLOAD_RATE = 19200
+UPLOAD_RATE = 115200
 
 # Name of this Makefile (used for "make depend").
 MAKEFILE = Makefile
@@ -86,7 +87,7 @@ LDFLAGS =
 
 
 # Programming support using avrdude. Settings and variables.
-AVRDUDE_PROGRAMMER = stk500
+AVRDUDE_PROGRAMMER = wiring
 AVRDUDE_PORT = $(PORT)
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 AVRDUDE_FLAGS = -F -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) \
@@ -101,7 +102,7 @@ OBJDUMP = $(PROGLOCATION)/avr-objdump
 SIZE = avr-size
 NM = avr-nm
 #AVRDUDE = avrdude
-AVRDUDE = /Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/bin/avrdude -C /Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/etc/avrdude.conf
+AVRDUDE = /Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/bin/avrdude -v -v -v -v -C/Applications/Arduino.app/Contents/Resources/Java/hardware/tools/avr/etc/avrdude.conf
 REMOVE = rm -f
 MV = mv -f
 
