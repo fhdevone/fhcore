@@ -530,7 +530,7 @@ void read_eeprom_memory()
   //  As part of startup, set variables from non-volatile EEPROM
   //
 
-
+  char next_char;
 
   //
   //  Read, augment, the write back boot counter
@@ -561,7 +561,8 @@ void read_eeprom_memory()
   float_hub_id = "";
   for(i = 0; i < 8; i++)
   {
-    float_hub_id += EEPROM.read(10 + i);
+    next_char = EEPROM.read(10 + i);
+    float_hub_id += next_char;
   }
   
   //
@@ -571,7 +572,7 @@ void read_eeprom_memory()
   float_hub_server = "";
   for(i = 0; i < 70; i++)
   {
-    char next_char = EEPROM.read(18 + i);    
+    next_char = EEPROM.read(18 + i);    
     if(next_char == '\0')
     {
       break;
@@ -593,7 +594,7 @@ void read_eeprom_memory()
   gprs_apn = "";
   for(i = 0; i < 40; i++)
   {
-    char next_char = EEPROM.read(90 + i);
+    next_char = EEPROM.read(90 + i);
     if(next_char == '\0')
     {
       break;
@@ -608,7 +609,7 @@ void read_eeprom_memory()
   gprs_username = "";
   for(i = 0; i < 40; i++)
   {
-    char next_char = EEPROM.read(130 + i);
+    next_char = EEPROM.read(130 + i);
     if(next_char == '\0')
     {
       break;
@@ -623,7 +624,7 @@ void read_eeprom_memory()
   gprs_password = "";
   for(i = 0; i < 19; i++)
   {
-    char next_char = EEPROM.read(170 + i);
+    next_char = EEPROM.read(170 + i);
     if(next_char == '\0')
     {
       break;
