@@ -459,7 +459,7 @@ void init_eeprom_memory()
 void write_eeprom_memory()
 {
 
-  int i;
+  unsigned int i;
 
   //
   //  This just pushes current variables (e.g. float hub id) to EEPROM 
@@ -700,21 +700,6 @@ void setup()
   
 
   help_info("Up and running...");
-  new_message = "(code=";
-  new_message += CODE_MAJOR_VERSION;
-  new_message += ".";
-  new_message += CODE_MINOR_VERSION;
-  
-  new_message += ",b=";
-  new_message += boot_counter;
-  new_message += ",dq=";
-  new_message += (int)detailed_state_count;
-  new_message += ",pq=";
-  new_message += (int)pump_state_count;
-  new_message += ")";
-  help_info(new_message);
-  new_message = "";
-  
   display_current_variables();  
   
 }
@@ -1196,7 +1181,7 @@ void report_state(bool console_only)
   if(gps_siv.length() > 0)
   {
     new_message += String(",N:");
-    new_message += gps_siv;
+    new_message.concat(gps_siv);
   }
 
   if(battery_one > 0.2)
@@ -2347,7 +2332,7 @@ void console_read()
     else if(console_buffer.charAt(0) == 'c')
     {
       local_console_mode = command_mode;
-      //help_info("Entering command mode");
+      help_info("Entering command mode");
     }
     else if(console_buffer.charAt(0) == 'd')
     {
@@ -2551,6 +2536,21 @@ void console_read()
 
 void display_current_variables()
 {
+  new_message = "(code=";
+  new_message += CODE_MAJOR_VERSION;
+  new_message += ".";
+  new_message += CODE_MINOR_VERSION;
+  
+  new_message += ",b=";
+  new_message += boot_counter;
+  new_message += ",dq=";
+  new_message += (int)detailed_state_count;
+  new_message += ",pq=";
+  new_message += (int)pump_state_count;
+  new_message += ")";
+  help_info(new_message);
+  new_message = "";
+  
   String line = "i=";
   line += float_hub_id;
   help_info(line);
