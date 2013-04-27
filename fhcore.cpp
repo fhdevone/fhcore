@@ -474,15 +474,6 @@ void init_eeprom_memory()
   EEPROM.write(DETAILED_STATE_COUNTER_LOCATION, 0);
   
   //
-  //  Do this last to show EEPROM set
-  //
-
-  for(int i = 0; i < 6; i++)
-  {
-    EEPROM.write(i, 42);
-  }
-  
-  //
   //  Set to some kind of default AES key
   //
   
@@ -502,6 +493,24 @@ void init_eeprom_memory()
   EEPROM.write(4093, 0x53);
   EEPROM.write(4094, 0x01);
   EEPROM.write(4095, 0x42);
+
+
+  //
+  //	In case our cellular/gprs unit came from factory with wrong GPS
+  //	settings, set the BAND to 7 (GSM frequencies 850 & 1900 ).  The can
+  //	be changed on the console with f= frequency command.
+  //
+
+  Serial1.println("AT+SBAND=7");
+  
+
+  //
+  //  Do this last to show EEPROM set
+  //
+
+  for(int i = 0; i < 6; i++) {
+    EEPROM.write(i, 42); }
+  
 
 }
 
@@ -2467,6 +2476,7 @@ void console_read()
       help_info("  u=foobar   - Set GPRS username to foobar");
       help_info("  w=barfoo   - Set GPRS password to barfoo");
       help_info("  k=0affee   - Set AES key to sixteen hex pairs");
+      help_info("  f=7        - Set GSM frequency band");
       help_info("  factory    - factory reset");
       help_info("  ");
     }
@@ -2681,6 +2691,23 @@ void console_read()
           write_eeprom_memory();
           help_info(display_string);
         }    
+      }
+      else if(console_buffer.startsWith("f=") && console_buffer.length() > 2)
+      {
+          int new_value = -1;
+          new_value = console_buffer[2];
+          if(new_value < 0 || new_value > 8)
+          {
+            Serial1.print("AT+SBAND=");
+            Serial1.println((char) new_value);
+            display_string = "f=";
+            display_string += (char) new_value;
+            help_info(display_string);
+          }
+          else
+          {
+            help_info("Bad input");
+          }
       }
     }
   }  
