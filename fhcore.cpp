@@ -2892,11 +2892,10 @@ void encode_latest_message_to_send()
   gprs_latest_message_to_send += "$,";
   for(i = 0; i < base64_length; i++)
   {
-    gprs_latest_message_to_send += cipher[i];
+    gprs_latest_message_to_send += (char) cipher[i];
   }
   Serial.print("Barbara: ");
   Serial.print(gprs_latest_message_to_send);
-  Serial.println("\"");
 
   
   
