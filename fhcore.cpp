@@ -47,7 +47,7 @@
   Compile time debug flags
 */
 
-#define GPRS_DEBUG_ON
+//#define GPRS_DEBUG_ON
 //#define GPS_DEBUG_ON
 //#define PUMP_DEBUG_ON
 
@@ -123,8 +123,9 @@ void pop_off_detailed_message();
   Status LED's
 */
 
-#define GREEN_LED  9
-#define BLUE_LED 11
+#define RED_LED	    12
+#define YELLOW_LED  11
+#define GREEN_LED   10
 
  /*
    Some global character arrays
@@ -152,7 +153,7 @@ void pop_off_detailed_message();
   long console_interval = 500;            //  Check console for input every 400 milliseconds
   long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
   long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
-  boolean blue_led_state = false;         //  For cycling on and off  
+  boolean green_led_state = false;         //  For cycling on and off  
   
   long sensor_previous_timestamp = 0;
   long gps_previous_timestamp = 0;
@@ -744,11 +745,14 @@ void setup()
   randomSeed(analogRead(0));
   
   //
-  //  Setup LED pins
+  //  Setup LED pins, Red always on to show power
   //
   
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
-  pinMode(BLUE_LED, OUTPUT);
+  digitalWrite(RED_LED, HIGH);
+  
   
   //
   //  Handle EEPROM logic for persistant settings
@@ -2770,52 +2774,49 @@ void debug_info(String some_info)
 
 void update_leds()
 {
-  if(gprs_communications_on == false)
+
+  if(gps_valid)
   {
-    digitalWrite(GREEN_LED, LOW);
-    digitalWrite(BLUE_LED, LOW);
-    return;
-  } 
-  //
-  //  Match Green and Blue to state
-  //
-  
-  if(gprs_connection_state == waiting_for_sind)
-  {
-    digitalWrite(GREEN_LED, LOW);
-    digitalWrite(BLUE_LED, LOW);
+    digitalWrite(YELLOW_LED, HIGH);
   }
   else
   {
-    digitalWrite(GREEN_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+  }
+
+  if(gprs_communications_on == false)
+  {
+    digitalWrite(GREEN_LED, LOW);
+    return;
+  } 
+
+  //
+  //  Match Green to state
+  //
   
-    //
-    //  Blue is off until we have real TCP/GPRS connection
-    //
-    if(gprs_connection_state == we_be_connected)
+  if(gprs_connection_state == we_be_connected)
+  {
+    if(gprs_communication_state == idle)
     {
-      if(gprs_communication_state == idle)
-      {
-        digitalWrite(BLUE_LED, HIGH);
-      }
-      else
-      {
-        if(blue_led_state == true)
-        {
-          digitalWrite(BLUE_LED, LOW);
-          blue_led_state = false;
-        }
-        else
-        {
-          digitalWrite(BLUE_LED, HIGH);
-          blue_led_state = true;
-        }
-      }
+      digitalWrite(GREEN_LED, HIGH);
     }
     else
     {
-      digitalWrite(BLUE_LED, LOW);
+      if(green_led_state == true)
+      {
+        digitalWrite(GREEN_LED, LOW);
+        green_led_state = false;
+      }
+      else
+      {
+        digitalWrite(GREEN_LED, HIGH);
+        green_led_state = true;
+      }
     }
+  }
+  else
+  {
+    digitalWrite(GREEN_LED, LOW);
   }
 }
 
