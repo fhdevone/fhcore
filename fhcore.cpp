@@ -150,8 +150,8 @@ void pop_off_detailed_message();
   long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
   long pump_interval = 300;               //  Check pump state every 300 milliseconds
   long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-//  long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
-  long idle_reporting_interval = 30000; 
+  long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+//  long idle_reporting_interval = 30000; 
   long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
   long console_interval = 500;            //  Check console for input every 400 milliseconds
   long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
