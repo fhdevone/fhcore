@@ -1,19 +1,30 @@
 #include <Arduino.h>
 /*
 
-  FloatHub Arduino Code
-  (c) Copyright 2011-2013 Thor Sigvaldason
-  (begun June 6, 2011)
+ FloatHub Arduino Code
+ (c) 2011 Thor Sigvaldason
+ (begun June 6, 2011)
  
-  Nov. 6, 2012
-
+ 
+  Nov. 6  2012
+  
   Working _extremely_ well now, including active sensor, data storage when GPRS unavailable, etc.
   Remaining task; cleanout enough string stuff, then implement NMEA input on Serial2.
+
+
  
   March, 2013
 
   Moved to a proper text-based build environment and versioning system on git-hub.
 
+
+  April, 2013
+  
+  Brought in encrypted/$FHS code that was working back in July and made it trunk
+  It encrypts content using aes-128-cbc encryption
+
+ 
+ 
 */
 
 #include <Wire.h>
@@ -21,6 +32,8 @@
 #include <EEPROM.h>
 #include <stdio.h>
 #include <Time.h>
+#include "libs/AES/AES.h"
+#include "libs/Base64/Base64.h"
 
 
 /*
@@ -31,22 +44,36 @@
 #define  CODE_MINOR_VERSION  1
 
 /*
-  Function prototypes
+  Some AES variables
 */
 
+AES aes;
+byte iv[16];
+byte volatile_iv[16];
+byte plain[512];
+byte cipher[512];
+
+/*
+  Function protytpes
+  (for functions below that are used before fully defined)
+  
+*/
+
+void bmp_read(void);
 void help_info(String some_info);
 void display_current_variables();
-void queue_detailed_message();
 void queue_pump_message(int which_pump, bool is_on);
 void echo_info(String some_info);
-void pop_off_pump_message();
-void pop_off_detailed_message();
+void queue_detailed_message();
+void encode_latest_message_to_send(void);
 float eeprom_read_float(int address);
 void slide_memory(int start, int how_many, int what_width);
 void debug_info(String some_info);
 
-
-
+/*
+void pop_off_pump_message();
+void pop_off_detailed_message();
+*/
 
 /*
   ID and connection values
@@ -81,9 +108,9 @@ void debug_info(String some_info);
   unsigned long boot_counter;
   unsigned long last_detailed_eeprom_write;
   byte          detailed_state_count;
-  byte          pump_state_count; 
- 
- 
+  byte          pump_state_count;
+  byte          float_hub_aes_key[16]; 
+
 /*
   Status LED's
 */
@@ -117,14 +144,15 @@ void debug_info(String some_info);
     Overall timing parameters
 */
 
-  long sensor_sample_interval = 2000;     //  Check temperature, pressure, every 2 seconds
+  long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
   long gps_interval = 50;                 //  Read GPS serial every 1/20 second
   long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
   long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
   long pump_interval = 300;               //  Check pump state every 300 milliseconds
   long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-  long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
-  long console_reporting_interval = 5000; //  Report to USB console every 30 seconds  
+//  long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+  long idle_reporting_interval = 30000; 
+  long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
   long console_interval = 500;            //  Check console for input every 400 milliseconds
   long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
   long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
@@ -453,13 +481,34 @@ void init_eeprom_memory()
   {
     EEPROM.write(i, 42);
   }
+  
+  //
+  //  Set to some kind of default AES key
+  //
+  
+  EEPROM.write(4080, 0x77);
+  EEPROM.write(4081, 0x0A);
+  EEPROM.write(4082, 0x8A);
+  EEPROM.write(4083, 0x65);
+  EEPROM.write(4084, 0xDA);
+  EEPROM.write(4085, 0x15);
+  EEPROM.write(4086, 0x6D);
+  EEPROM.write(4087, 0x24);
+  EEPROM.write(4088, 0xEE);
+  EEPROM.write(4089, 0x2A);
+  EEPROM.write(4090, 0x09);
+  EEPROM.write(4091, 0x32);
+  EEPROM.write(4092, 0x77);
+  EEPROM.write(4093, 0x53);
+  EEPROM.write(4094, 0x01);
+  EEPROM.write(4095, 0x42);
 
 }
 
 void write_eeprom_memory()
 {
 
-  unsigned int i;
+  int i;
 
   //
   //  This just pushes current variables (e.g. float hub id) to EEPROM 
@@ -520,17 +569,25 @@ void write_eeprom_memory()
     EEPROM.write(170 + i, gprs_password[i]);
   }
   EEPROM.write(170+i, '\0');
-
+  
+  //
+  //  Store AES key
+  //
+  
+  for(i = 0; i < 16; i++)
+  {
+    EEPROM.write(4080 + i, float_hub_aes_key[i]);
+  }
 }
 
 void read_eeprom_memory()
 {
-
+  char next_char;
   //
   //  As part of startup, set variables from non-volatile EEPROM
   //
 
-  char next_char;
+
 
   //
   //  Read, augment, the write back boot counter
@@ -650,6 +707,15 @@ void read_eeprom_memory()
       last_detailed_eeprom_write += (unsigned int) EEPROM.read(DETAILED_STATE_START_LOCATION + (detailed_state_count * DETAILED_STATE_DATA_WIDTH) + 1) * 65536;
       last_detailed_eeprom_write += (unsigned int) EEPROM.read(DETAILED_STATE_START_LOCATION + (detailed_state_count * DETAILED_STATE_DATA_WIDTH) + 0) * 16777216;
   }
+  
+  //
+  //  Read AES key
+  //
+  
+  for(i = 0; i < 16; i++)
+  {
+    float_hub_aes_key[i] = EEPROM.read(4080 + i);
+  }    
 }  
 
 void setup()
@@ -666,6 +732,12 @@ void setup()
   
   Serial.begin(9600);
   delay(200);
+  
+  //
+  //  Seed the randoim number generator
+  //
+  
+  randomSeed(analogRead(0));
   
   //
   //  Setup LED pins
@@ -695,11 +767,31 @@ void setup()
   read_eeprom_memory();
   
   //
+  //  Do one sensor read for temperature and barometric so first console messages have this data
+  //
+  
+  bmp_read();
+  
+  //
   //  Announce we are up
   //
   
 
   help_info("Up and running...");
+  new_message = "(code=";
+  new_message += CODE_MAJOR_VERSION;
+  new_message += ".";
+  new_message += CODE_MINOR_VERSION;
+  
+  new_message += ",b=";
+  new_message += boot_counter;
+  new_message += ",dq=";
+  new_message += (int)detailed_state_count;
+  new_message += ",pq=";
+  new_message += (int)pump_state_count;
+  new_message += ")";
+  help_info(new_message);
+  new_message = "";
   display_current_variables();  
   
 }
@@ -1181,7 +1273,7 @@ void report_state(bool console_only)
   if(gps_siv.length() > 0)
   {
     new_message += String(",N:");
-    new_message.concat(gps_siv);
+    new_message += gps_siv;
   }
 
   if(battery_one > 0.2)
@@ -1350,7 +1442,7 @@ void pop_off_pump_message()
   
   pump_state_count = pump_state_count - 1;
   EEPROM.write(PUMP_STATE_COUNTER_LOCATION, pump_state_count);
-  
+  encode_latest_message_to_send();
 }
 
 
@@ -1661,6 +1753,7 @@ void pop_off_detailed_message()
   detailed_state_count = detailed_state_count - 1;
   EEPROM.write(DETAILED_STATE_COUNTER_LOCATION, detailed_state_count);
   
+  encode_latest_message_to_send();
 }
 
 
@@ -2025,6 +2118,7 @@ void queue_detailed_message()
   if(gprs_latest_message_to_send.length() == 0)
   {
     gprs_latest_message_to_send = new_message;
+    encode_latest_message_to_send();
   }
   else
   {
@@ -2090,6 +2184,7 @@ void queue_pump_message(int which_pump, bool is_on)
   if(gprs_latest_message_to_send.length() == 0)
   {
     gprs_latest_message_to_send = new_message;
+    encode_latest_message_to_send();
   }
   else
   {
@@ -2317,7 +2412,9 @@ void gprs_read()
 void console_read()
 {
   //Serial.println("%%%%%%%% entering console_read");
+  int i;
   String console_buffer;
+  String display_string;
   while(Serial.available() && console_buffer.length() < 255)
   {
      console_buffer += (char) Serial.read();
@@ -2332,7 +2429,7 @@ void console_read()
     else if(console_buffer.charAt(0) == 'c')
     {
       local_console_mode = command_mode;
-      help_info("Entering command mode");
+      //help_info("Entering command mode");
     }
     else if(console_buffer.charAt(0) == 'd')
     {
@@ -2369,7 +2466,7 @@ void console_read()
       help_info("  a=foo.wap  - Set GPRS APN to foo.wap");
       help_info("  u=foobar   - Set GPRS username to foobar");
       help_info("  w=barfoo   - Set GPRS password to barfoo");
-      help_info("  k=x,y      - Set byte x of keyspace to value y");
+      help_info("  k=0affee   - Set AES key to sixteen hex pairs");
       help_info("  factory    - factory reset");
       help_info("  ");
     }
@@ -2406,7 +2503,7 @@ void console_read()
       {
         bool bad_chars = false;
         
-        for(int i=2; i < console_buffer.length(); i++)
+        for(i=2; i < console_buffer.length(); i++)
         {
           if(console_buffer[i] < 45 ||
              console_buffer[i] > 122)
@@ -2420,7 +2517,7 @@ void console_read()
         {
           float_hub_server = console_buffer.substring(2);
           write_eeprom_memory();
-          String display_string = "s=";
+          display_string = "s=";
           display_string += float_hub_server;
           help_info(display_string);
         }        
@@ -2429,7 +2526,7 @@ void console_read()
       {
         bool bad_chars = false;
         
-        for(int i=2; i < console_buffer.length(); i++)
+        for(i=2; i < console_buffer.length(); i++)
         {
           if(console_buffer[i] < 45 ||
              console_buffer[i] > 122)
@@ -2443,7 +2540,7 @@ void console_read()
         {
           gprs_apn = console_buffer.substring(2);
           write_eeprom_memory();
-          String display_string = "a=";
+          display_string = "a=";
           display_string += gprs_apn;
           help_info(display_string);
         }        
@@ -2452,7 +2549,7 @@ void console_read()
       {
         bool bad_chars = false;
         
-        for(int i=2; i < console_buffer.length(); i++)
+        for(i=2; i < console_buffer.length(); i++)
         {
           if(console_buffer[i] < 45 ||
              console_buffer[i] > 122)
@@ -2466,7 +2563,7 @@ void console_read()
         {
           gprs_username = console_buffer.substring(2);
           write_eeprom_memory();
-          String display_string = "u=";
+          display_string = "u=";
           display_string += gprs_username;
           help_info(display_string);
         }        
@@ -2475,7 +2572,7 @@ void console_read()
       {
         bool bad_chars = false;
         
-        for(int i=2; i < console_buffer.length(); i++)
+        for(i=2; i < console_buffer.length(); i++)
         {
           if(console_buffer[i] < 45 ||
              console_buffer[i] > 122)
@@ -2489,7 +2586,7 @@ void console_read()
         {
           gprs_password = console_buffer.substring(2);
           write_eeprom_memory();
-          String display_string = "w=";
+          display_string = "w=";
           display_string += gprs_password;
           help_info(display_string);
         }        
@@ -2501,7 +2598,7 @@ void console_read()
           console_buffer.substring(2).toCharArray(temp_array, console_buffer.length() - 1);
           float_hub_server_port = atoi(temp_array);
           write_eeprom_memory();
-          String display_string = "p=";
+          display_string = "p=";
           display_string += float_hub_server_port;
           help_info(display_string);
       }
@@ -2510,7 +2607,7 @@ void console_read()
         
         bool bad_chars = false;
         
-        for(int i=0; i < 8; i++)
+        for(i=0; i < 8; i++)
         {
           if(console_buffer[i+2] < 37 ||
              console_buffer[i+2] > 126)
@@ -2524,33 +2621,75 @@ void console_read()
         {
           float_hub_id = console_buffer.substring(2,10);
           write_eeprom_memory();
-          String display_string = "i=";
+          display_string = "i=";
           display_string += float_hub_id;
           help_info(display_string);
         }
       }
-    }    
-  }
+      else if(console_buffer.startsWith("k=") && console_buffer.length() == 34)
+      {        
+        
+        bool bad_chars = false;
+        
+        for(i=0; i < 32; i++)
+        {
+          if(
+              console_buffer[i+2] < '0' &&
+              console_buffer[i+2] > '9' &&
+              console_buffer[i+2] < 'a' &&
+              console_buffer[i+2] > 'f' 
+            )          
+          {
+            help_info("Bad input");
+            bad_chars = true;
+            break;
+          }        
+        }
+     
+        if(!bad_chars)
+        {
+          display_string = "k=";
+          for(i = 0; i < 16; i++)
+          {
+            int new_value = 0;
+            if (console_buffer[2 + (i * 2)] <='9')
+            {
+                new_value = (console_buffer[2 + (i * 2)] - '0' ) * 16;
+            }
+            else
+            {
+                new_value = (console_buffer[2 + (i * 2)] - 'a' + 10) * 16;
+            }
+    
+            if (console_buffer[3 + (i * 2)] <='9')
+            {
+                new_value += console_buffer[3 + (i * 2)] - '0';
+            }
+            else
+            {
+                new_value += console_buffer[3 + (i * 2)] - 'a' + 10;
+            }
+
+            float_hub_aes_key[i] = new_value;
+            if(float_hub_aes_key[i] < 16)
+            {
+              display_string += "0";
+            }
+            display_string += String(float_hub_aes_key[i], HEX);
+          }
+
+          write_eeprom_memory();
+          help_info(display_string);
+        }    
+      }
+    }
+  }  
   //Serial.println("%%%%%%%% leaving console_read");
 }
 
 void display_current_variables()
 {
-  new_message = "(code=";
-  new_message += CODE_MAJOR_VERSION;
-  new_message += ".";
-  new_message += CODE_MINOR_VERSION;
-  
-  new_message += ",b=";
-  new_message += boot_counter;
-  new_message += ",dq=";
-  new_message += (int)detailed_state_count;
-  new_message += ",pq=";
-  new_message += (int)pump_state_count;
-  new_message += ")";
-  help_info(new_message);
-  new_message = "";
-  
+  int i;
   String line = "i=";
   line += float_hub_id;
   help_info(line);
@@ -2574,7 +2713,18 @@ void display_current_variables()
   line = "w=";
   line += gprs_password;
   help_info(line);
-
+  
+  line = "k=";
+  for(i = 0; i < 16; i++)
+  {
+    if(float_hub_aes_key[i] < 16)
+    {
+      line += "0";
+    }
+    line += String(float_hub_aes_key[i], HEX);
+    line += " ";
+  }
+  help_info(line);
 }
 
 void help_info(String some_info)
@@ -2654,6 +2804,109 @@ void update_leds()
     }
   }
 }
+
+void encode_latest_message_to_send()
+{
+
+
+  //
+  //  Take the latest message that is set up to go over GPRS and AES encode it, then Base-64 convert it
+  //
+    
+  int i;
+  int cipher_length, base64_length;
+  //AES aes;
+ 
+  aes.set_key (float_hub_aes_key, 128) ;
+  
+  //byte iv[16];
+  //byte volatile_iv[16];
+  //byte plain[256];
+  //byte cipher[256];
+
+  for(i = 0; i < 16; i++)
+  {
+    iv[i] = random(0, 256);
+    volatile_iv[i] = iv[i];
+  }
+  
+
+  //
+  //  Copy current gprs message to plain
+  //
+  
+  
+  for(i = 0; i < gprs_latest_message_to_send.length(); i++)
+  {
+    plain[i] = gprs_latest_message_to_send.charAt(i);
+  }
+  cipher_length = i;
+  if(cipher_length % 16 == 0)
+  {
+    for(i = 0; i < 16; i++)
+    {
+      plain[cipher_length + i] = 16;
+    }
+    cipher_length += 16;
+  }
+  else
+  {
+    for(i = 0; i < 16 - (cipher_length % 16); i++)
+    {
+      plain[cipher_length + i] = 16 - (cipher_length % 16);
+    }
+    cipher_length += i;
+  }
+
+  //
+  //  Encrypt current message with AES CBC
+  // 
+ 
+  aes.cbc_encrypt (plain, cipher,  cipher_length / 4, volatile_iv) ;
+  
+  //
+  //  Now we reuse the plain text array to store cipher with the 
+  //  initialization vector at the beginning
+  //
+
+  
+  for(i = 0; i < 16; i++)
+  {
+    plain[i] = iv[i];
+  }
+  
+  for(i = 0; i < cipher_length; i++)
+  {
+    plain[16 + i] = cipher[i];
+  }
+  
+  //
+  //  Now convert that long line of bytes in plain to base 64, recylcing the cipher array to hold it
+  //
+  
+
+  base64_length = base64_encode( (char *) cipher, (char *) plain, cipher_length + 16);
+  cipher[base64_length] = '\0';
+  gprs_latest_message_to_send = "$FHS:";
+  gprs_latest_message_to_send += float_hub_id;
+  gprs_latest_message_to_send += "$,";
+  for(i = 0; i < base64_length; i++)
+  {
+    gprs_latest_message_to_send += cipher[i];
+  }
+  Serial.print("Barbara: ");
+  Serial.print(gprs_latest_message_to_send);
+  Serial.println("\"");
+
+  
+  
+  //
+  //  Clean up?
+  // 
+  aes.clean();  //  Not sure if that does anything useful or not.   
+
+}
+
 
 void loop()
 {
@@ -2735,3 +2988,4 @@ void loop()
     update_leds();
   }
 }
+
