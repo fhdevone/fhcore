@@ -2238,7 +2238,7 @@ void gprs_read()
   if(gprs_read_buffer.length() > 0)
   {
     
-    debug_info("^^^ GPRS-DEBUG  ^^^");
+    debug_info("\\/ GPRS-DEBUG  \\/");
     debug_info(gprs_read_buffer);
               
     if(gprs_read_buffer.indexOf("CME ERROR") > 0)
@@ -2742,14 +2742,13 @@ void echo_info(String some_info)
 
 void debug_info(String some_info)
 {
-//  String step_one = some_info.replace('\n','|');
-//  String step_two = step_one.replace('\r','|');
+  some_info.replace('\n','|');
+  some_info.replace('\r','|');
   if(local_console_mode == debug_mode)
   {
     Serial.print("$FHD:");
     Serial.print(float_hub_id);
     Serial.print("$    ");
-//    Serial.println(step_two);
     Serial.println(some_info);
   }
 }
@@ -2894,10 +2893,6 @@ void encode_latest_message_to_send()
   {
     gprs_latest_message_to_send += (char) cipher[i];
   }
-  Serial.print("Barbara: ");
-  Serial.print(gprs_latest_message_to_send);
-
-  
   
   //
   //  Clean up?
