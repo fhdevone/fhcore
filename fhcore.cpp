@@ -44,6 +44,14 @@
 #define  CODE_MINOR_VERSION  1
 
 /*
+  Compile time debug flags
+*/
+
+#define GPRS_DEBUG_ON
+//#define GPS_DEBUG_ON
+//#define PUMP_DEBUG_ON
+
+/*
   Some AES variables
 */
 
@@ -126,18 +134,6 @@ void pop_off_detailed_message();
   char     temp_string[20];  
 
 
-/*
-  Local serial/usb console display mode and whether we actually do GPRS data or not
-*/
-
-  enum console_mode
-  {
-    command_mode,
-    echo_mode,
-    debug_mode
-  };
-  
-  console_mode local_console_mode = echo_mode;
   bool gprs_communications_on = true;
 
 /*
@@ -729,8 +725,7 @@ void read_eeprom_memory()
 
 void setup()
 {
-  local_console_mode = echo_mode;
-  //local_console_mode = debug_mode;
+
   bmp_setup();
   gps_setup();
   gprs_setup();
@@ -842,8 +837,10 @@ void parse_gps_buffer_as_rmc()
       date_start < 0    ||    date_start >= gps_parse_buffer.length()    ||
       var_start < 0     ||    var_start >= gps_parse_buffer.length()     )
   {
-      //debug_info("Bad RMC string (below), will not parse");
-      //debug_info(gps_parse_buffer);
+#ifdef GPS_DEBUG_ON
+      debug_info("Bad RMC string (below), will not parse");
+      debug_info(gps_parse_buffer);
+#endif
       return;
   }
       
@@ -899,15 +896,11 @@ void parse_gps_buffer_as_rmc()
   }
   if(is_valid == "A")
   {
-    //
-    //  Set our time
-    //
-    
-    //setTime(
-    
     if(!gps_valid) 
     {
-      //debug_info("Got gps fix");
+#ifdef GPS_DEBUG_ON
+      debug_info("Got gps fix");
+#endif
     }
     gps_valid = true;
   }
@@ -915,7 +908,9 @@ void parse_gps_buffer_as_rmc()
   {
     if(gps_valid)
     {
-      //debug_info("Lost gps fix");
+#ifdef GPS_DEBUG_ON
+      debug_info("Lost gps fix");
+#endif
     }
     gps_valid = false;
   }
@@ -999,29 +994,6 @@ void parse_gps_buffer_as_rmc()
     }
     latitude_history[4] = current_latitude;
     longitude_history[4] = current_longitude;
-
-
-    /*
-      Old way, not accurate enough
-
-    memset(temp_string, 0, 20 * sizeof(char));
-    gps_sog.toCharArray(temp_string, 19);
-    float current_speed = atof(temp_string);
-    
-    //Serial.print("Speed: "); Serial.println(current_speed);
-  
-    if(current_speed > 0.3 && currently_active == false)
-    {
-      currently_active = true;
-      //debug_info("Active mode on");
-    }
-    else if(currently_active == true && current_speed <= 0.3)
-    {
-      currently_active = false;
-      //debug_info("Active mode off"); 
-    }
-    */
-
   }
   else  
   {    
@@ -1061,8 +1033,10 @@ void parse_gps_buffer_as_gga()
       alt_start < 0  ||   alt_start >= gps_parse_buffer.length()    ||
       altu_start < 0 ||   altu_start >= gps_parse_buffer.length())
   {
-      //debug_info("Bad GGA string (below), will not parse");
-      //debug_info(gps_parse_buffer);
+#ifdef GPS_DEBUG_ON
+      debug_info("Bad GGA string (below), will not parse");
+      debug_info(gps_parse_buffer);
+#endif
       return;
   }
       
@@ -1094,35 +1068,35 @@ void parse_gps_buffer_as_gga()
 
 void gps_read()
 {
-  //Serial.println("%%%%%%%% entering gps_read");
-  //debug_info("------------------------- GPS START BUFFER ---------------------------------------------");
-  //debug_info(gps_read_buffer);
+
+#ifdef GPS_DEBUG_ON
+  debug_info("------------------------- GPS START BUFFER ---------------------------------------------");
+  debug_info(gps_read_buffer);
+#endif
   bool new_data = false;
-  //Serial.print("         into the while read ...: \"");  
   while(Serial3.available() && gps_read_buffer.length() < max_gps_buffer)
   {
      int incoming_byte = Serial3.read();
      if(incoming_byte > 31 && incoming_byte < 127)
      {
-       //Serial.print((char) incoming_byte);
        gps_read_buffer += String((char) incoming_byte);
        new_data = true;
      }
   }
-  //Serial.println("\"         ... out of the while read");
   
   int asterix_cut_point = gps_read_buffer.indexOf('*');
 
   if(gps_read_buffer.length() > 0 && new_data == true)
   {
-    //debug_info("------------------------- GPS MID BUFFER ---------------------------------------------");
-    //debug_info(gps_read_buffer);
+
+#ifdef GPS_DEBUG_ON
+    debug_info("------------------------- GPS MID BUFFER ---------------------------------------------");
+    debug_info(gps_read_buffer);
+#endif
   }
   
   if(asterix_cut_point > -1)
   {
-    //Serial.print("In the asterix cut with a value of ");
-    //Serial.println(asterix_cut_point);
     int rmc_cut_point = gps_read_buffer.indexOf("$GPRMC,");
     int gga_cut_point = gps_read_buffer.indexOf("$GPGGA,");
 
@@ -1154,8 +1128,12 @@ void gps_read()
   {
     gps_read_buffer = "";
   }
-  //debug_info(gps_read_buffer);
-  //debug_info("------------------------- END GPS READ BUFFER -----------------------------------------");
+
+#ifdef GPS_DEBUG_ON
+  debug_info(gps_read_buffer);
+  debug_info("------------------------- END GPS READ BUFFER -----------------------------------------");
+#endif
+
 }
 
 void voltage_read()
@@ -1176,7 +1154,9 @@ void pump_read()
      }
      else if(pump_one_state == off)
      {
-       //debug_info("Pump one turned on!");
+#ifdef PUMP_DEBUG_ON
+       debug_info("Pump one turned on!");
+#endif
        new_message = "$FHB:";
        new_message += float_hub_id;
        new_message += "$";
@@ -1201,8 +1181,9 @@ void pump_read()
      }
      else if(pump_one_state == on)
      {
-       //debug_info("Pump one turned off!");
-
+#ifdef PUMP_DEBUG_ON
+       debug_info("Pump one turned off!");
+#endif
        new_message = "$FHB:";
        new_message += float_hub_id;
        new_message += "$";
@@ -1339,16 +1320,11 @@ void report_state(bool console_only)
   {
     queue_detailed_message();
   }
-  /*
-  if(local_console_mode == debug_mode)
-  {
-    print_message_queue();
-  }
-  */
   echo_info(new_message);
   //Serial.println("%%%%%%%% leaving report_state");
 }
 
+/*
 void print_message_queue()
 {
     //debug_info("** message queue dump **");
@@ -1363,7 +1339,7 @@ void print_message_queue()
     //}
 
 }
-
+*/
 
 void pop_off_pump_message()
 {
@@ -2247,12 +2223,16 @@ void gprs_read()
   if(gprs_read_buffer.length() > 0)
   {
     
+#ifdef GPRS_DEBUG_ON
     debug_info("\\/ GPRS-DEBUG  \\/");
     debug_info(gprs_read_buffer);
+#endif
               
     if(gprs_read_buffer.indexOf("CME ERROR") > 0)
     {
+#ifdef GPRS_DEBUG_ON
       debug_info("*** Rebooting GPRS   ***");
+#endif
       Serial1.println("AT+CFUN=0,1");
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
@@ -2297,7 +2277,9 @@ void gprs_read()
       gprs_connection_state = waiting_for_pdp_context_active;
       gprs_watchdog_timestamp = current_timestamp;
       Serial1.println("AT+CGACT=1,1");
+#ifdef GPRS_DEBUG_ON
       debug_info("Waiting on ACT=1,1...");
+#endif
     }
     else if(gprs_connection_state == waiting_for_pdp_context_active && gprs_read_buffer.indexOf("OK") > 0)
     {
@@ -2319,7 +2301,9 @@ void gprs_read()
     {
       gprs_connection_state = we_be_connected;
       gprs_watchdog_timestamp = current_timestamp;
+#ifdef GPRS_DEBUG_ON
       debug_info("We got internets!");
+#endif
     }
   }
   
@@ -2409,7 +2393,9 @@ void gprs_read()
   
   if(current_timestamp - gprs_watchdog_timestamp > gprs_watchdog_interval)
   {
+#ifdef GPRS_DEBUG_ON
     debug_info("*** Rebooting GPRS (Watchdog)  ***");
+#endif
     Serial1.println("AT+CFUN=0,1");
     gprs_connection_state = waiting_for_sind;
     gprs_communication_state = idle;
@@ -2430,6 +2416,7 @@ void console_read()
   }
   if (console_buffer.length() > 0)
   {
+/*
     if(console_buffer.charAt(0) == 'e')
     {
       local_console_mode = echo_mode;
@@ -2445,11 +2432,13 @@ void console_read()
       local_console_mode = debug_mode;
       //help_info("Entering debug mode");
     }
-    else if(console_buffer.charAt(0) == 'q')
+*/
+    if(console_buffer.charAt(0) == 'q')
     {
       gprs_communications_on = false;
       //help_info("GPRS off");
     }
+
     /*
     else if(console_buffer.charAt(0) == 'h')
     {
@@ -2485,7 +2474,9 @@ void console_read()
     {
       //help_info("GPRS on");
       gprs_communications_on = true;
+#ifdef GPRS_DEBUG_ON
       debug_info("*** Rebooting GPRS (Watchdog)  ***");
+#endif
       Serial1.println("AT+CFUN=0,1");
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
@@ -2495,7 +2486,7 @@ void console_read()
     {
       display_current_variables();
     }    
-    else if (local_console_mode == command_mode)
+    else 
     {
       console_buffer = console_buffer.substring(0,console_buffer.indexOf('\r'));
       console_buffer = console_buffer.substring(0,console_buffer.indexOf('\n'));
@@ -2771,13 +2762,10 @@ void debug_info(String some_info)
 {
   some_info.replace('\n','|');
   some_info.replace('\r','|');
-  if(local_console_mode == debug_mode)
-  {
-    Serial.print("$FHD:");
-    Serial.print(float_hub_id);
-    Serial.print("$    ");
-    Serial.println(some_info);
-  }
+  Serial.print("$FHD:");
+  Serial.print(float_hub_id);
+  Serial.print("$    ");
+  Serial.println(some_info);
 }
 
 void update_leds()
