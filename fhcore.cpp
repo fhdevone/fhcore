@@ -1142,24 +1142,29 @@ void gps_read()
 
 void voltage_read()
 {
-  battery_one = analogRead(1) / 37.213; //39.163;
-  battery_two = analogRead(2) / 37.213; //39.163;
-  charger_one = analogRead(3) / 37.213; // 39.163;
+  battery_one 	= analogRead(3) / 37.213; 
+  battery_two 	= analogRead(2) / 37.213;
+  battery_three = analogRead(1) / 37.213; 
+
+  charger_one 	= analogRead(6) / 37.213; 
+  charger_two 	= analogRead(5) / 37.213; 
+  charger_three	= analogRead(4) / 37.213;
 }
 
-void pump_read()
+
+void individual_pump_read(int pump_number, pump_state &state, int analog_input)
 {
-  float pump_one = analogRead(4) / 39.163;
-  if(pump_one > 2.0)
+  float pump_value = analogRead(analog_input) / 37.213;
+  if(pump_value > 2.0)
   {
-     if(pump_one_state == unknown)
+     if(state == unknown)
      {
-       pump_one_state = on;
+       state = on;
      }
-     else if(pump_one_state == off)
+     else if(state == off)
      {
 #ifdef PUMP_DEBUG_ON
-       debug_info("Pump one turned on!");
+       debug_info("Pump turned on!");
 #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
@@ -1169,24 +1174,25 @@ void pump_read()
          new_message += ",U:";
          new_message += gps_utc;          
        }
-       new_message += ",P:11";
+       new_message += ",P:";
+       new_message += pump_number;
+       new_message += "1";
        
        queue_pump_message(1,true);
-       //print_message_queue();
        echo_info(new_message);
-       pump_one_state = on;       
+       state = on;       
      }
   }
   else
   {
-     if(pump_one_state == unknown)
+     if(state == unknown)
      {
-       pump_one_state = off;
+       state = off;
      }
-     else if(pump_one_state == on)
+     else if(state == on)
      {
 #ifdef PUMP_DEBUG_ON
-       debug_info("Pump one turned off!");
+       debug_info("Pump turned off!");
 #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
@@ -1197,13 +1203,22 @@ void pump_read()
          new_message += ",U:";
          new_message += gps_utc;          
        }
-       new_message += ",P:10";
+       new_message += ",P:";
+       new_message += pump_number;
+       new_message += "0";
        queue_pump_message(1,0);
-       //print_message_queue();
        echo_info(new_message);
-       pump_one_state = off;
+       state = off;
      }
   }
+}
+
+
+void pump_read()
+{
+  individual_pump_read(1, pump_one_state, 9);
+  individual_pump_read(2, pump_two_state, 8);
+  individual_pump_read(3, pump_three_state, 7);
 }
 
 
