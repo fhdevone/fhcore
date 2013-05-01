@@ -88,11 +88,11 @@ void pop_off_detailed_message();
 */
 
 //  String        default_float_hub_id           = "throwout";
-//  String        default_float_hub_server       = "sigvaldason.homeip.net";
-    unsigned int  default_float_hub_server_port  = 9009;
-//  String        default_gprs_apn               = "wap.cingular";
-//  String        default_gprs_username          = "WAP@CINGULARGPRS.COM";
-//  String        default_gprs_password          = "CINGULAR1";
+//  String        default_float_hub_server       = "fds.floathub.net";
+//  unsigned int  default_float_hub_server_port  = 44;
+//  String        default_gprs_apn               = "apn.name";
+//  String        default_gprs_username          = "username";
+//  String        default_gprs_password          = "password";
 
 #define  PUMP_STATE_COUNTER_LOCATION  189
 #define  PUMP_STATE_START_LOCATION    190
@@ -336,42 +336,37 @@ void init_eeprom_memory()
   //  Set default id
   //
   
-  EEPROM.write(10, 't');
-  EEPROM.write(11, 'h');
-  EEPROM.write(12, 'r');
+  EEPROM.write(10, 'o');
+  EEPROM.write(11, 'u');
+  EEPROM.write(12, 't');
   EEPROM.write(13, 'o');
-  EEPROM.write(14, 'w');
-  EEPROM.write(15, 'o');
-  EEPROM.write(16, 'u');
-  EEPROM.write(17, 't');
+  EEPROM.write(14, 'f');
+  EEPROM.write(15, 'b');
+  EEPROM.write(16, 'o');
+  EEPROM.write(17, 'x');
   
   //
   //  Set default server
   //
   
 
-  EEPROM.write(18, 's');
-  EEPROM.write(19, 'i');
-  EEPROM.write(20, 'g');
-  EEPROM.write(21, 'v');
-  EEPROM.write(22, 'a');
+  EEPROM.write(18, 'f');
+  EEPROM.write(19, 'd');
+  EEPROM.write(20, 's');
+  EEPROM.write(21, '.');
+  EEPROM.write(22, 'f');
   EEPROM.write(23, 'l');
-  EEPROM.write(24, 'd');
+  EEPROM.write(24, 'o');
   EEPROM.write(25, 'a');
-  EEPROM.write(26, 's');
-  EEPROM.write(27, 'o');
-  EEPROM.write(28, 'n');
-  EEPROM.write(29, '.');
-  EEPROM.write(30, 'h');
-  EEPROM.write(31, 'o');
-  EEPROM.write(32, 'm');
-  EEPROM.write(33, 'e');
-  EEPROM.write(34, 'i');
-  EEPROM.write(35, 'p');
-  EEPROM.write(36, '.');
-  EEPROM.write(37, 'n');
-  EEPROM.write(38, 'e');
-  EEPROM.write(39, 't');
+  EEPROM.write(26, 't');
+  EEPROM.write(27, 'h');
+  EEPROM.write(28, 'u');
+  EEPROM.write(29, 'b');
+  EEPROM.write(30, '.');
+  EEPROM.write(31, 'n');
+  EEPROM.write(32, 'e');
+  EEPROM.write(33, 't');
+  EEPROM.write(34, '\0');
 
   EEPROM.write(40, '\0');
   
@@ -379,27 +374,23 @@ void init_eeprom_memory()
   //  Set default port
   //
   
-  EEPROM.write(88, highByte(default_float_hub_server_port));
-  EEPROM.write(89, lowByte(default_float_hub_server_port));
+  EEPROM.write(88, 0);
+  EEPROM.write(89, 44);
   
   //
   //  set default gprs apn
   //
   
-  EEPROM.write(90, 'w');
-  EEPROM.write(91, 'a');
-  EEPROM.write(92, 'p');
+  EEPROM.write(90, 'a');
+  EEPROM.write(91, 'p');
+  EEPROM.write(92, 'n');
   EEPROM.write(93, '.');
-  EEPROM.write(94, 'c');
-  EEPROM.write(95, 'i');
-  EEPROM.write(96, 'n');
-  EEPROM.write(97, 'g');
-  EEPROM.write(98, 'u');
-  EEPROM.write(99, 'l');
-  EEPROM.write(100, 'a');
-  EEPROM.write(101, 'r');
+  EEPROM.write(94, 'n');
+  EEPROM.write(95, 'a');
+  EEPROM.write(96, 'm');
+  EEPROM.write(97, 'e');
   
-  EEPROM.write(102, '\0');
+  EEPROM.write(98, '\0');
   
   //for(i = 0; i < default_gprs_apn.length(); i++)
   //{
@@ -411,28 +402,16 @@ void init_eeprom_memory()
   //  set default gprs username
   //
   
-  EEPROM.write(130, 'W');
-  EEPROM.write(131, 'A');
-  EEPROM.write(132, 'P');
-  EEPROM.write(133, '@');
-  EEPROM.write(134, 'C');
-  EEPROM.write(135, 'I');
-  EEPROM.write(136, 'N');
-  EEPROM.write(137, 'G');
-  EEPROM.write(138, 'U');
-  EEPROM.write(139, 'L');
-  EEPROM.write(140, 'A');
-  EEPROM.write(141, 'R');
-  EEPROM.write(142, 'G');
-  EEPROM.write(143, 'P');
-  EEPROM.write(144, 'R');
-  EEPROM.write(145, 'S');
-  EEPROM.write(146, '.');
-  EEPROM.write(147, 'C');
-  EEPROM.write(148, 'O');
-  EEPROM.write(149, 'M');
+  EEPROM.write(130, 'u');
+  EEPROM.write(131, 's');
+  EEPROM.write(132, 'e');
+  EEPROM.write(133, 'r');
+  EEPROM.write(134, 'n');
+  EEPROM.write(135, 'a');
+  EEPROM.write(136, 'm');
+  EEPROM.write(137, 'e');
 
-  EEPROM.write(150, '\0');
+  EEPROM.write(138, '\0');
   
   //for(i = 0; i < default_gprs_username.length(); i++)
   //{
@@ -444,17 +423,16 @@ void init_eeprom_memory()
   //  set default gprs password
   //
   
-  EEPROM.write(170, 'C');
-  EEPROM.write(171, 'I');
-  EEPROM.write(172, 'N');
-  EEPROM.write(173, 'G');
-  EEPROM.write(174, 'U');
-  EEPROM.write(175, 'L');
-  EEPROM.write(176, 'A');
-  EEPROM.write(177, 'R');
-  EEPROM.write(178, '1');
+  EEPROM.write(170, 'p');
+  EEPROM.write(171, 'a');
+  EEPROM.write(172, 's');
+  EEPROM.write(173, 's');
+  EEPROM.write(174, 'w');
+  EEPROM.write(175, 'o');
+  EEPROM.write(176, 'r');
+  EEPROM.write(177, 'd');
 
-  EEPROM.write(179, '\0');
+  EEPROM.write(178, '\0');
   
   
   //for(i = 0; i < default_gprs_password.length(); i++)
@@ -474,22 +452,22 @@ void init_eeprom_memory()
   //  Set to some kind of default AES key
   //
   
-  EEPROM.write(4080, 0x77);
-  EEPROM.write(4081, 0x0A);
-  EEPROM.write(4082, 0x8A);
-  EEPROM.write(4083, 0x65);
-  EEPROM.write(4084, 0xDA);
-  EEPROM.write(4085, 0x15);
-  EEPROM.write(4086, 0x6D);
-  EEPROM.write(4087, 0x24);
-  EEPROM.write(4088, 0xEE);
-  EEPROM.write(4089, 0x2A);
-  EEPROM.write(4090, 0x09);
-  EEPROM.write(4091, 0x32);
-  EEPROM.write(4092, 0x77);
-  EEPROM.write(4093, 0x53);
-  EEPROM.write(4094, 0x01);
-  EEPROM.write(4095, 0x42);
+  EEPROM.write(4080, 0x00);
+  EEPROM.write(4081, 0x01);
+  EEPROM.write(4082, 0x02);
+  EEPROM.write(4083, 0x03);
+  EEPROM.write(4084, 0x04);
+  EEPROM.write(4085, 0x05);
+  EEPROM.write(4086, 0x06);
+  EEPROM.write(4087, 0x07);
+  EEPROM.write(4088, 0x08);
+  EEPROM.write(4089, 0x09);
+  EEPROM.write(4090, 0x0A);
+  EEPROM.write(4091, 0x0B);
+  EEPROM.write(4092, 0x0C);
+  EEPROM.write(4093, 0x0D);
+  EEPROM.write(4094, 0x0E);
+  EEPROM.write(4095, 0x0F);
 
 
   //
@@ -514,7 +492,7 @@ void init_eeprom_memory()
 void write_eeprom_memory()
 {
 
-  int i;
+  unsigned int i;
 
   //
   //  This just pushes current variables (e.g. float hub id) to EEPROM 
@@ -786,20 +764,6 @@ void setup()
   
 
   help_info("Up and running...");
-  new_message = "(code=";
-  new_message += CODE_MAJOR_VERSION;
-  new_message += ".";
-  new_message += CODE_MINOR_VERSION;
-  
-  new_message += ",b=";
-  new_message += boot_counter;
-  new_message += ",dq=";
-  new_message += (int)detailed_state_count;
-  new_message += ",pq=";
-  new_message += (int)pump_state_count;
-  new_message += ")";
-  help_info(new_message);
-  new_message = "";
   display_current_variables();  
   
 }
@@ -2726,6 +2690,21 @@ void console_read()
 
 void display_current_variables()
 {
+  new_message = "(code=";
+  new_message += CODE_MAJOR_VERSION;
+  new_message += ".";
+  new_message += CODE_MINOR_VERSION;
+  
+  new_message += ",b=";
+  new_message += boot_counter;
+  new_message += ",dq=";
+  new_message += (int)detailed_state_count;
+  new_message += ",pq=";
+  new_message += (int)pump_state_count;
+  new_message += ")";
+  help_info(new_message);
+  new_message = "";
+
   int i;
   String line = "i=";
   line += float_hub_id;
