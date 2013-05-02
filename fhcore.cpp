@@ -141,30 +141,30 @@ void pop_off_detailed_message();
     Overall timing parameters
 */
 
-  long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
-  long gps_interval = 50;                 //  Read GPS serial every 1/20 second
-  long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
-  long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
-  long pump_interval = 300;               //  Check pump state every 300 milliseconds
-  long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-  long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
-//  long idle_reporting_interval = 30000; 
-  long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
-  long console_interval = 500;            //  Check console for input every 400 milliseconds
-  long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
-  long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
+  unsigned long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
+  unsigned long gps_interval = 50;                 //  Read GPS serial every 1/20 second
+  unsigned long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
+  unsigned long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
+  unsigned long pump_interval = 300;               //  Check pump state every 300 milliseconds
+  unsigned long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
+  unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+//  unsigned long idle_reporting_interval = 30000; 
+  unsigned long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
+  unsigned long console_interval = 500;            //  Check console for input every 400 milliseconds
+  unsigned long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
+  unsigned long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
   boolean green_led_state = false;         //  For cycling on and off  
   
-  long sensor_previous_timestamp = 0;
-  long gps_previous_timestamp = 0;
-  long voltage_previous_timestamp = 0;
-  long gprs_previous_timestamp = 0;
-  long pump_previous_timestamp = 0;
-  long previous_active_timestamp = 0;
-  long previous_idle_timestamp = 0;
-  long previous_console_timestamp = 0; 
-  long console_previous_timestamp = 0;
-  long led_previous_timestamp = 0;
+  unsigned long sensor_previous_timestamp = 0;
+  unsigned long gps_previous_timestamp = 0;
+  unsigned long voltage_previous_timestamp = 0;
+  unsigned long gprs_previous_timestamp = 0;
+  unsigned long pump_previous_timestamp = 0;
+  unsigned long previous_active_timestamp = 0;
+  unsigned long previous_idle_timestamp = 0;
+  unsigned long previous_console_timestamp = 0; 
+  unsigned long console_previous_timestamp = 0;
+  unsigned long led_previous_timestamp = 0;
 
   bool currently_active = true;
   
@@ -793,17 +793,17 @@ void parse_gps_buffer_as_rmc()
   int date_start = gps_parse_buffer.indexOf(',', tmg_start + 1);
   int var_start =  gps_parse_buffer.indexOf(',', date_start + 1);
   
-  if( time_start < 0    ||    time_start >= gps_parse_buffer.length()    ||
-      time_break < 0    ||    time_break >= gps_parse_buffer.length()    ||
-      status_start < 0  ||    status_start >= gps_parse_buffer.length()  ||
-      lat_start < 0     ||    lat_start >= gps_parse_buffer.length()     ||
-      nors_start < 0    ||    nors_start >= gps_parse_buffer.length()    ||
-      lon_start < 0     ||    lon_start >= gps_parse_buffer.length()     ||
-      wore_start < 0    ||    wore_start >= gps_parse_buffer.length()    ||
-      sog_start < 0     ||    sog_start >= gps_parse_buffer.length()     ||
-      tmg_start < 0     ||    tmg_start >= gps_parse_buffer.length()     ||
-      date_start < 0    ||    date_start >= gps_parse_buffer.length()    ||
-      var_start < 0     ||    var_start >= gps_parse_buffer.length()     )
+  if( time_start < 0    ||    time_start >= (int) gps_parse_buffer.length()    ||
+      time_break < 0    ||    time_break >= (int) gps_parse_buffer.length()    ||
+      status_start < 0  ||    status_start >= (int) gps_parse_buffer.length()  ||
+      lat_start < 0     ||    lat_start >= (int) gps_parse_buffer.length()     ||
+      nors_start < 0    ||    nors_start >= (int) gps_parse_buffer.length()    ||
+      lon_start < 0     ||    lon_start >= (int) gps_parse_buffer.length()     ||
+      wore_start < 0    ||    wore_start >= (int) gps_parse_buffer.length()    ||
+      sog_start < 0     ||    sog_start >= (int) gps_parse_buffer.length()     ||
+      tmg_start < 0     ||    tmg_start >= (int) gps_parse_buffer.length()     ||
+      date_start < 0    ||    date_start >= (int) gps_parse_buffer.length()    ||
+      var_start < 0     ||    var_start >= (int) gps_parse_buffer.length()     )
   {
 #ifdef GPS_DEBUG_ON
       debug_info("Bad RMC string (below), will not parse");
@@ -990,16 +990,16 @@ void parse_gps_buffer_as_gga()
   int alt_start =  gps_parse_buffer.indexOf(',', hdp_start + 1);
   int altu_start = gps_parse_buffer.indexOf(',', alt_start + 1);
      
-  if( time_start < 0 ||   time_start >= gps_parse_buffer.length()   ||
-      lat_start < 0  ||   lat_start >= gps_parse_buffer.length()    ||
-      nors_start < 0 ||   nors_start >= gps_parse_buffer.length()   ||
-      lon_start < 0  ||   lon_start >= gps_parse_buffer.length()    ||
-      wore_start < 0 ||   wore_start >= gps_parse_buffer.length()   ||
-      qual_start < 0 ||   qual_start >= gps_parse_buffer.length()   ||
-      siv_start < 0  ||   siv_start >= gps_parse_buffer.length()    ||
-      hdp_start < 0  ||   hdp_start >= gps_parse_buffer.length()    ||
-      alt_start < 0  ||   alt_start >= gps_parse_buffer.length()    ||
-      altu_start < 0 ||   altu_start >= gps_parse_buffer.length())
+  if( time_start < 0 ||   time_start >= (int) gps_parse_buffer.length()   ||
+      lat_start < 0  ||   lat_start >= (int) gps_parse_buffer.length()    ||
+      nors_start < 0 ||   nors_start >= (int) gps_parse_buffer.length()   ||
+      lon_start < 0  ||   lon_start >= (int) gps_parse_buffer.length()    ||
+      wore_start < 0 ||   wore_start >= (int) gps_parse_buffer.length()   ||
+      qual_start < 0 ||   qual_start >= (int) gps_parse_buffer.length()   ||
+      siv_start < 0  ||   siv_start >= (int) gps_parse_buffer.length()    ||
+      hdp_start < 0  ||   hdp_start >= (int) gps_parse_buffer.length()    ||
+      alt_start < 0  ||   alt_start >= (int) gps_parse_buffer.length()    ||
+      altu_start < 0 ||   altu_start >= (int) gps_parse_buffer.length())
   {
 #ifdef GPS_DEBUG_ON
       debug_info("Bad GGA string (below), will not parse");
@@ -1042,7 +1042,7 @@ void gps_read()
   debug_info(gps_read_buffer);
 #endif
   bool new_data = false;
-  while(Serial3.available() && gps_read_buffer.length() < max_gps_buffer)
+  while(Serial3.available() && (int) gps_read_buffer.length() < max_gps_buffer)
   {
      int incoming_byte = Serial3.read();
      if(incoming_byte > 31 && incoming_byte < 127)
@@ -1071,20 +1071,20 @@ void gps_read()
     if(rmc_cut_point > -1 && rmc_cut_point < asterix_cut_point)
     {
       gps_parse_buffer = gps_read_buffer.substring(rmc_cut_point, asterix_cut_point + 1);
-      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3,gps_read_buffer.length()), gps_read_buffer.length());
+      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3, (int) gps_read_buffer.length()), gps_read_buffer.length());
       parse_gps_buffer_as_rmc();
       gps_parse_buffer = "";
     }
     else if(gga_cut_point > -1 && gga_cut_point < asterix_cut_point)
     {
       gps_parse_buffer = gps_read_buffer.substring(gga_cut_point, asterix_cut_point + 1);
-      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3,gps_read_buffer.length()), gps_read_buffer.length());
+      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3, (int) gps_read_buffer.length()), gps_read_buffer.length());
       parse_gps_buffer_as_gga();
       gps_parse_buffer = "";
     }
     else
     {
-      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3,gps_read_buffer.length()), gps_read_buffer.length());
+      gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3, (int) gps_read_buffer.length()), gps_read_buffer.length());
     }
   }
 
@@ -1092,7 +1092,7 @@ void gps_read()
   //  Out of sync? Garbled? Throw it out, start again
   //
   
-  if(gps_read_buffer.length() >= max_gps_buffer - 1 )
+  if((int) gps_read_buffer.length() >= max_gps_buffer - 1 )
   {
     gps_read_buffer = "";
   }
@@ -1903,11 +1903,11 @@ void write_detailed_state(int which_position)
   
   byte_zero = 0;
   
-  if(gps_latitude[11] = 'N')
+  if(gps_latitude[11] == 'N')
   {
     byte_zero |= B00000001;
   }
-  if(gps_longitude[12] = 'W')
+  if(gps_longitude[12] == 'W')
   {
     byte_zero |= B00000010;
   }
@@ -2199,7 +2199,7 @@ void gprs_read()
   unsigned long current_timestamp = millis();
   String gprs_read_buffer;
 
-  while(Serial1.available() && gprs_read_buffer.length() < max_gprs_buffer)
+  while(Serial1.available() && (int) gprs_read_buffer.length() < max_gprs_buffer)
   {
      gprs_read_buffer += (char) Serial1.read();
   }
@@ -2390,7 +2390,7 @@ void gprs_read()
 void console_read()
 {
   //Serial.println("%%%%%%%% entering console_read");
-  int i;
+  unsigned int i;
   String console_buffer;
   String display_string;
   while(Serial.available() && console_buffer.length() < 255)
@@ -2690,7 +2690,7 @@ void console_read()
 
 void display_current_variables()
 {
-  new_message = "(code=";
+  new_message = "code=";
   new_message += CODE_MAJOR_VERSION;
   new_message += ".";
   new_message += CODE_MINOR_VERSION;
@@ -2701,7 +2701,6 @@ void display_current_variables()
   new_message += (int)detailed_state_count;
   new_message += ",pq=";
   new_message += (int)pump_state_count;
-  new_message += ")";
   help_info(new_message);
   new_message = "";
 
