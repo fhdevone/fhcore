@@ -79,9 +79,20 @@ void slide_memory(int start, int how_many, int what_width);
 void debug_info(String some_info);
 
 /*
-void pop_off_pump_message();
-void pop_off_detailed_message();
+  Define some EEPROM memory locations
+  (where we store data if communications are down)
 */
+
+#define  PUMP_STATE_COUNTER_LOCATION  189
+#define  PUMP_STATE_START_LOCATION    190
+#define  PUMP_STATE_DATA_WIDTH        5
+#define  PUMP_STATE_NUMB_LOCATIONS    50
+
+#define  DETAILED_STATE_COUNTER_LOCATION  440
+#define  DETAILED_STATE_START_LOCATION    441
+#define  DETAILED_STATE_DATA_WIDTH        49
+#define  DETAILED_STATE_NUMB_LOCATIONS    74
+
 
 /*
   ID and connection values
@@ -94,30 +105,23 @@ void pop_off_detailed_message();
 //  String        default_gprs_username          = "username";
 //  String        default_gprs_password          = "password";
 
-#define  PUMP_STATE_COUNTER_LOCATION  189
-#define  PUMP_STATE_START_LOCATION    190
-#define  PUMP_STATE_DATA_WIDTH        5
-#define  PUMP_STATE_NUMB_LOCATIONS    50
 
-#define  DETAILED_STATE_COUNTER_LOCATION  440
-#define  DETAILED_STATE_START_LOCATION    441
-#define  DETAILED_STATE_DATA_WIDTH        49
-#define  DETAILED_STATE_NUMB_LOCATIONS    74
 
-#define  CHALLENGE_RESPONSE_START_LOCATION  4067
-#define  CHALLENGE_RESPONSE_NUMB_LOCATIONS  20
+/*
+  Various communication and account settings/data
+*/
 
-  String        float_hub_id;
-  String        float_hub_server;
-  unsigned int  float_hub_server_port;
-  String        gprs_apn;
-  String        gprs_username;
-  String        gprs_password;
-  unsigned long boot_counter;
-  unsigned long last_detailed_eeprom_write;
-  byte          detailed_state_count;
-  byte          pump_state_count;
-  byte          float_hub_aes_key[16]; 
+String        float_hub_id;			// default: outofbox
+String        float_hub_server;			// default: fds.floathub.net
+unsigned int  float_hub_server_port;		// default: 44
+String        gprs_apn;				// default: apn.name
+String        gprs_username;			// default: username
+String        gprs_password;			// default: password
+byte          detailed_state_count;
+byte          pump_state_count;
+byte          float_hub_aes_key[16]; 
+unsigned long boot_counter;			
+unsigned long last_detailed_eeprom_write;
 
 /*
   Status LED's
@@ -127,61 +131,63 @@ void pop_off_detailed_message();
 #define YELLOW_LED  11
 #define GREEN_LED   10
 
- /*
-   Some global character arrays
- */
+/*
+   Some global Strings, character arrays
+*/
  
-  String   new_message = "";
-  char     temp_string[20];  
+String latest_message_to_send = "";
+String new_message = "";
+char   temp_string[20];  
 
+/*
+  Toggleable flag for if we are trying to communicate
+*/
 
-  bool gprs_communications_on = true;
+bool gprs_communications_on = true;
 
 /*
     Overall timing parameters
 */
 
-  unsigned long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
-  unsigned long gps_interval = 50;                 //  Read GPS serial every 1/20 second
-  unsigned long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
-  unsigned long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
-  unsigned long pump_interval = 300;               //  Check pump state every 300 milliseconds
-  unsigned long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-  unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
-//  unsigned long idle_reporting_interval = 30000; 
-  unsigned long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
-  unsigned long console_interval = 500;            //  Check console for input every 400 milliseconds
-  unsigned long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
-  unsigned long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
-  boolean green_led_state = false;         //  For cycling on and off  
+unsigned long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
+unsigned long gps_interval = 50;                 //  Read GPS serial every 1/20 second
+unsigned long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
+unsigned long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
+unsigned long pump_interval = 300;               //  Check pump state every 300 milliseconds
+unsigned long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
+unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+unsigned long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
+unsigned long console_interval = 500;            //  Check console for input every 400 milliseconds
+unsigned long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
+unsigned long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
+boolean green_led_state = false;         	 //  For cycling on and off  
   
-  unsigned long sensor_previous_timestamp = 0;
-  unsigned long gps_previous_timestamp = 0;
-  unsigned long voltage_previous_timestamp = 0;
-  unsigned long gprs_previous_timestamp = 0;
-  unsigned long pump_previous_timestamp = 0;
-  unsigned long previous_active_timestamp = 0;
-  unsigned long previous_idle_timestamp = 0;
-  unsigned long previous_console_timestamp = 0; 
-  unsigned long console_previous_timestamp = 0;
-  unsigned long led_previous_timestamp = 0;
+unsigned long sensor_previous_timestamp = 0;
+unsigned long gps_previous_timestamp = 0;
+unsigned long voltage_previous_timestamp = 0;
+unsigned long gprs_previous_timestamp = 0;
+unsigned long pump_previous_timestamp = 0;
+unsigned long previous_active_timestamp = 0;
+unsigned long previous_idle_timestamp = 0;
+unsigned long previous_console_timestamp = 0; 
+unsigned long console_previous_timestamp = 0;
+unsigned long led_previous_timestamp = 0;
 
-  bool currently_active = true;
+/*
+  Is the device currently "active" (i.e. is the vessel in movement and sending high frequency updates)?
+*/
   
-  /*
-      GPRS flags that describe current state of communication
-  */
+bool currently_active = true;
   
-  long gprs_watchdog_timestamp = 0;
-  int  max_gprs_buffer = 300;
-  String gprs_latest_message_to_send = "";
+/*
+  GPRS flags that describe current state of communication
+*/
+  
+long gprs_watchdog_timestamp = 0;
+int  max_gprs_buffer = 300;
  
-  //const int message_stack_max_count = 5;
-  //String message_stack[message_stack_max_count];
-  
-
-  enum connection_state
-  {
+enum connection_state
+{
     waiting_for_sind,
     waiting_for_gprs_attachment,
     waiting_for_pdp_ack,
@@ -190,21 +196,21 @@ void pop_off_detailed_message();
     waiting_for_remote_host_ack,
     waiting_for_string_format_ack,
     we_be_connected
-  };
+};
   
-  connection_state gprs_connection_state = waiting_for_sind;
+connection_state gprs_connection_state = waiting_for_sind;
   
-  enum communication_state
-  {
+enum communication_state
+{
     idle,
     waiting_for_socket_ack,
     waiting_for_socket_connection,
     waiting_for_data_sent_ack,
     waiting_for_response,
     waiting_for_socket_close_ack
-  };
+};
   
-  communication_state gprs_communication_state = idle;
+communication_state gprs_communication_state = idle;
 
 /*
 
@@ -300,15 +306,7 @@ void gprs_setup()
   //
   
   Serial1.begin(9600);
-  //gprs_sind = false;
-  //gprs_ready_to_start = false;
-  //gprs_tcp_connected = false;
-  //gprs_readback = false;
-  gprs_latest_message_to_send = "";
-  //for(int i = 0; i < message_stack_max_count; i++)
-  //{
-  //  message_stack[i] = "";
-  //}
+  latest_message_to_send = "";
   gprs_connection_state = waiting_for_sind;
   gprs_communication_state = idle;
   gprs_watchdog_timestamp = millis();
@@ -435,12 +433,6 @@ void init_eeprom_memory()
   EEPROM.write(178, '\0');
   
   
-  //for(i = 0; i < default_gprs_password.length(); i++)
-  //{
-  //  EEPROM.write(792 + i, default_gprs_password[i]);
-  //}
-  //EEPROM.write(792+i, '\0');
- 
   //
   //  Reset EPROM means no stored data to upload either
   // 
@@ -733,7 +725,9 @@ void setup()
   
   
   //
-  //  Handle EEPROM logic for persistant settings
+  //  Handle EEPROM logic for persistant settings (if the first 6 bytes of
+  //  EEPROM memory are not all set to 42, then this is a completely
+  //  unitialized device)
   //
   
   int a = 0;
@@ -809,6 +803,7 @@ void parse_gps_buffer_as_rmc()
       debug_info("Bad RMC string (below), will not parse");
       debug_info(gps_parse_buffer);
 #endif
+      Serial.println("YO MOMMA AFRICA!!!");
       return;
   }
       
@@ -888,7 +883,7 @@ void parse_gps_buffer_as_rmc()
   gps_bearing_true  = gps_parse_buffer.substring(tmg_start + 1, date_start);
  
   //
-  //  Use speed over ground to 
+  //  Use running average of GPS positions to see if we are moving (active)
   //
  
 
@@ -1005,6 +1000,7 @@ void parse_gps_buffer_as_gga()
       debug_info("Bad GGA string (below), will not parse");
       debug_info(gps_parse_buffer);
 #endif
+      Serial.println("Yo MAMMA ASIA!!!!");
       return;
   }
       
@@ -1307,26 +1303,9 @@ void report_state(bool console_only)
   //Serial.println("%%%%%%%% leaving report_state");
 }
 
-/*
-void print_message_queue()
-{
-    //debug_info("** message queue dump **");
-    //debug_info(gprs_latest_message_to_send);
-
-    //for(int i = 0; i < message_stack_max_count; i++)
-    //{
-    //  if(message_stack[i].length() > 0)
-    //  {
-    //    debug_info(message_stack[i]);
-    //  }
-    //}
-
-}
-*/
-
 void pop_off_pump_message()
 {
-  gprs_latest_message_to_send = "";
+  latest_message_to_send = "";
   if(pump_state_count < 1)
   {
     return;
@@ -1340,9 +1319,9 @@ void pop_off_pump_message()
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 1) * 65536;
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 0) * 16777216;
     
-  gprs_latest_message_to_send += "$FHB:";
-  gprs_latest_message_to_send += float_hub_id;
-  gprs_latest_message_to_send += "$,U:";
+  latest_message_to_send += "$FHB:";
+  latest_message_to_send += float_hub_id;
+  latest_message_to_send += "$,U:";
   
   //
   //  Reconstitute date time string
@@ -1351,61 +1330,61 @@ void pop_off_pump_message()
   handy = hour(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = minute(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = second(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = day(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = month(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
-  gprs_latest_message_to_send += year(an_unsigned_long);
+  latest_message_to_send += handy;
+  latest_message_to_send += year(an_unsigned_long);
   
   //
   //  pump number, then on or off
   //
   
   handy = EEPROM.read(which_location + 4);
-  gprs_latest_message_to_send += ",P:";
+  latest_message_to_send += ",P:";
   if((handy & B00000100) && (handy & B00000010))
   {
-    gprs_latest_message_to_send += "3";
+    latest_message_to_send += "3";
   }
   else if(handy & B00000100)
   {
-    gprs_latest_message_to_send += "2";
+    latest_message_to_send += "2";
   }
   else if(handy & B00000010)
   {
-    gprs_latest_message_to_send += "1";
+    latest_message_to_send += "1";
   }
   
   if(handy & B00000001)
   {
-     gprs_latest_message_to_send += "1";
+     latest_message_to_send += "1";
   }
   else
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
   
   pump_state_count = pump_state_count - 1;
@@ -1416,7 +1395,7 @@ void pop_off_pump_message()
 
 void pop_off_detailed_message()
 {
-  gprs_latest_message_to_send = "";
+  latest_message_to_send = "";
   if(detailed_state_count < 1)
   {
     return;
@@ -1438,9 +1417,9 @@ void pop_off_detailed_message()
   Serial.print(which_location + 0); Serial.print(" --> "); Serial.print((unsigned int) EEPROM.read(which_location + 0)); Serial.println(" * 16777216");
   */
   
-  gprs_latest_message_to_send += "$FHA:";
-  gprs_latest_message_to_send += float_hub_id;
-  gprs_latest_message_to_send += "$,U:";
+  latest_message_to_send += "$FHA:";
+  latest_message_to_send += float_hub_id;
+  latest_message_to_send += "$,U:";
   
   //
   //  Reconstitute date time string
@@ -1449,64 +1428,64 @@ void pop_off_detailed_message()
   handy = hour(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = minute(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = second(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = day(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   handy = month(an_unsigned_long);
   if(handy < 10)
   {
-     gprs_latest_message_to_send += "0";
+     latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
-  gprs_latest_message_to_send += year(an_unsigned_long);
+  latest_message_to_send += handy;
+  latest_message_to_send += year(an_unsigned_long);
   
   //
   //  temperature
   //
   
   handy = EEPROM.read(which_location + 4) - 40 ;
-  gprs_latest_message_to_send += ",T:";
-  gprs_latest_message_to_send += handy;
-  gprs_latest_message_to_send += ".";
+  latest_message_to_send += ",T:";
+  latest_message_to_send += handy;
+  latest_message_to_send += ".";
   handy = EEPROM.read(which_location + 5);
   if(handy < 10)
   {
-    gprs_latest_message_to_send += "0";
+    latest_message_to_send += "0";
   }  
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   
   //
   //  pressure
   //
   
   handy = EEPROM.read(which_location + 6);
-  gprs_latest_message_to_send += ",P:";
-  gprs_latest_message_to_send += handy;
-  gprs_latest_message_to_send += ".";
+  latest_message_to_send += ",P:";
+  latest_message_to_send += handy;
+  latest_message_to_send += ".";
   handy = EEPROM.read(which_location + 7);
   if(handy < 10)
   {
-    gprs_latest_message_to_send += "0";
+    latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   
   //
   //  N/S, E/W, and valid or not for lat/lon
@@ -1524,24 +1503,24 @@ void pop_off_detailed_message()
   
     an_unsigned_long = EEPROM.read(which_location + 9);
     an_unsigned_long += EEPROM.read(which_location + 8) * 256;
-    gprs_latest_message_to_send += ",L:";
+    latest_message_to_send += ",L:";
     if(an_unsigned_long < 10)
     {
-      gprs_latest_message_to_send += "0";
+      latest_message_to_send += "0";
     }
-    gprs_latest_message_to_send += an_unsigned_long;
-    gprs_latest_message_to_send += " ";
+    latest_message_to_send += an_unsigned_long;
+    latest_message_to_send += " ";
     memset(temp_string, 0, 20 * sizeof(char));
     float_one = eeprom_read_float(which_location + 10);
     dtostrf(float_one,7,5,temp_string);
-    gprs_latest_message_to_send += temp_string;
+    latest_message_to_send += temp_string;
     if(handy & B00000001)
     {
-      gprs_latest_message_to_send += "N";
+      latest_message_to_send += "N";
     }
     else
     {
-      gprs_latest_message_to_send += "S";
+      latest_message_to_send += "S";
     }
   
     //
@@ -1550,28 +1529,28 @@ void pop_off_detailed_message()
   
     an_unsigned_long = EEPROM.read(which_location + 15);
     an_unsigned_long += EEPROM.read(which_location + 14) * 256;
-    gprs_latest_message_to_send += ",O:";
+    latest_message_to_send += ",O:";
     if(an_unsigned_long < 10)
     {
-      gprs_latest_message_to_send += "00";
+      latest_message_to_send += "00";
     }
     else if(an_unsigned_long < 100)
     {
-      gprs_latest_message_to_send += "0";
+      latest_message_to_send += "0";
     }    
-    gprs_latest_message_to_send += an_unsigned_long;
-    gprs_latest_message_to_send += " ";
+    latest_message_to_send += an_unsigned_long;
+    latest_message_to_send += " ";
     memset(temp_string, 0, 20 * sizeof(char));
     float_one = eeprom_read_float(which_location + 16);
     dtostrf(float_one,7,5,temp_string);
-    gprs_latest_message_to_send += temp_string;
+    latest_message_to_send += temp_string;
     if(handy & B00000001)
     {
-      gprs_latest_message_to_send += "W";
+      latest_message_to_send += "W";
     }
     else
     {
-      gprs_latest_message_to_send += "E";
+      latest_message_to_send += "E";
     }
   
     //
@@ -1580,29 +1559,29 @@ void pop_off_detailed_message()
   
     handy = EEPROM.read(which_location + 22);
     handy += EEPROM.read(which_location + 21) * 256;
-    gprs_latest_message_to_send += ",A:";
-    gprs_latest_message_to_send += handy;
-    gprs_latest_message_to_send += ".";
+    latest_message_to_send += ",A:";
+    latest_message_to_send += handy;
+    latest_message_to_send += ".";
     handy=EEPROM.read(which_location + 23);
-    gprs_latest_message_to_send += handy;
+    latest_message_to_send += handy;
   
     //
     //  Horizontal precision
     //
   
-    gprs_latest_message_to_send += ",H:";
-    gprs_latest_message_to_send += (int) EEPROM.read(which_location + 24);
-    gprs_latest_message_to_send += ".";
-    gprs_latest_message_to_send += (int) EEPROM.read(which_location + 25);
+    latest_message_to_send += ",H:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 24);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 25);
   
     //
     //  Speed
     //
   
-    gprs_latest_message_to_send += ",S:";
-    gprs_latest_message_to_send += (int) EEPROM.read(which_location + 26);
-    gprs_latest_message_to_send += ".";
-    gprs_latest_message_to_send += (int) EEPROM.read(which_location + 27);
+    latest_message_to_send += ",S:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 26);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 27);
   
     //
     //  Bearing
@@ -1611,27 +1590,27 @@ void pop_off_detailed_message()
   
     handy = EEPROM.read(which_location + 29);
     handy += EEPROM.read(which_location + 28) * 256;
-    gprs_latest_message_to_send += ",B:";
-    gprs_latest_message_to_send += handy;
-    gprs_latest_message_to_send += ".";
+    latest_message_to_send += ",B:";
+    latest_message_to_send += handy;
+    latest_message_to_send += ".";
     handy=EEPROM.read(which_location + 30);
     if(handy < 10)
     {
-      gprs_latest_message_to_send += "0";
+      latest_message_to_send += "0";
     }
-    gprs_latest_message_to_send += handy;
+    latest_message_to_send += handy;
   }
   
   //
   //  Satellites in View
   //
-  gprs_latest_message_to_send += ",N:";
+  latest_message_to_send += ",N:";
   handy=EEPROM.read(which_location + 31);
   if(handy < 10)
   {
-    gprs_latest_message_to_send += "0";
+    latest_message_to_send += "0";
   }
-  gprs_latest_message_to_send += handy;
+  latest_message_to_send += handy;
   
   //
   //  Battery One
@@ -1640,11 +1619,11 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 32);
    if(handy > 0)
    {
-     gprs_latest_message_to_send += ",V:";
+     latest_message_to_send += ",V:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
-     gprs_latest_message_to_send += temp_string; 
+     latest_message_to_send += temp_string; 
    }
   
   //
@@ -1654,11 +1633,11 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 33);
    if(handy > 0)
    {
-     gprs_latest_message_to_send += ",W:";
+     latest_message_to_send += ",W:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
-     gprs_latest_message_to_send += temp_string; 
+     latest_message_to_send += temp_string; 
    }
   
   //
@@ -1668,11 +1647,11 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 34);
    if(handy > 0)
    {
-     gprs_latest_message_to_send += ",X:";
+     latest_message_to_send += ",X:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
-     gprs_latest_message_to_send += temp_string; 
+     latest_message_to_send += temp_string; 
    }
 
   //
@@ -1682,11 +1661,11 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 35);
   if(handy > 0)   
   {
-    gprs_latest_message_to_send += ",C:";
+    latest_message_to_send += ",C:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
-    gprs_latest_message_to_send += temp_string; 
+    latest_message_to_send += temp_string; 
   }
   
   //
@@ -1696,11 +1675,11 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 36);
   if(handy > 0)
   {
-    gprs_latest_message_to_send += ",D:";
+    latest_message_to_send += ",D:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
-    gprs_latest_message_to_send += temp_string; 
+    latest_message_to_send += temp_string; 
   }
   
   //
@@ -1710,11 +1689,11 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 37);
   if(handy > 0)
   {
-    gprs_latest_message_to_send += ",E:";
+    latest_message_to_send += ",E:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
-    gprs_latest_message_to_send += temp_string; 
+    latest_message_to_send += temp_string; 
   }
   
   
@@ -2081,11 +2060,11 @@ void write_detailed_state(int which_position)
 void queue_detailed_message()
 {
   //Serial.println("%%%%%%%% entering queue_message");
-  //gprs_latest_message_to_send = a_message;
+  //latest_message_to_send = a_message;
   
-  if(gprs_latest_message_to_send.length() == 0)
+  if(latest_message_to_send.length() == 0)
   {
-    gprs_latest_message_to_send = new_message;
+    latest_message_to_send = new_message;
     encode_latest_message_to_send();
   }
   else
@@ -2130,7 +2109,7 @@ void queue_detailed_message()
     }
     if(!stored_somewhere)
     {
-      gprs_latest_message_to_send = message_stack[0];
+      latest_message_to_send = message_stack[0];
       for(int i = 0; i < message_stack_max_count - 1; i++)
       {
         message_stack[i] = message_stack[i+1];
@@ -2149,9 +2128,9 @@ void queue_pump_message(int which_pump, bool is_on)
 {
   //Serial.println("%%%%%%%% entering queue_pump_message");
   
-  if(gprs_latest_message_to_send.length() == 0)
+  if(latest_message_to_send.length() == 0)
   {
-    gprs_latest_message_to_send = new_message;
+    latest_message_to_send = new_message;
     encode_latest_message_to_send();
   }
   else
@@ -2296,11 +2275,11 @@ void gprs_read()
       //  OK, if I'm in here I know I _can_ send data, but what state of sending am I in (maybe already on the middle of doing so)
       //
       
-      if(gprs_communication_state == idle && gprs_latest_message_to_send.length() < 1)
+      if(gprs_communication_state == idle && latest_message_to_send.length() < 1)
       {
         gprs_watchdog_timestamp = current_timestamp;
       }
-      else if(gprs_communication_state == idle && gprs_latest_message_to_send.length() > 0)
+      else if(gprs_communication_state == idle && latest_message_to_send.length() > 0)
       {
         Serial1.println("AT+SDATASTART=1,1");
         gprs_communication_state = waiting_for_socket_ack;
@@ -2317,7 +2296,7 @@ void gprs_read()
         if(gprs_read_buffer.indexOf("+SOCKSTATUS:  1,1") > 0)
         {
           String formatted_message = "AT+SSTRSEND=1,\"";
-          formatted_message += gprs_latest_message_to_send;
+          formatted_message += latest_message_to_send;
           formatted_message += "\"";
           //Serial.print("Sending ");
           //Serial.println(formatted_message);
@@ -2340,10 +2319,10 @@ void gprs_read()
         if(gprs_read_buffer.indexOf("$FHR$ OK") > 0)
         {
           pop_off_message_queue();
-          if(gprs_latest_message_to_send.length() > 0)
+          if(latest_message_to_send.length() > 0)
           {
             String formatted_message = "AT+SSTRSEND=1,\"";
-            formatted_message += gprs_latest_message_to_send;
+            formatted_message += latest_message_to_send;
             formatted_message += "\"";
             //Serial.print("Sending::::::::::");
             //Serial.println(formatted_message);
@@ -2821,17 +2800,10 @@ void encode_latest_message_to_send()
   //  Take the latest message that is set up to go over GPRS and AES encode it, then Base-64 convert it
   //
     
-  int i;
-  int cipher_length, base64_length;
-  //AES aes;
+  int i, cipher_length, base64_length;
  
   aes.set_key (float_hub_aes_key, 128) ;
   
-  //byte iv[16];
-  //byte volatile_iv[16];
-  //byte plain[256];
-  //byte cipher[256];
-
   for(i = 0; i < 16; i++)
   {
     iv[i] = random(0, 256);
@@ -2844,9 +2816,9 @@ void encode_latest_message_to_send()
   //
   
   
-  for(i = 0; i < gprs_latest_message_to_send.length(); i++)
+  for(i = 0; i < (int) latest_message_to_send.length(); i++)
   {
-    plain[i] = gprs_latest_message_to_send.charAt(i);
+    plain[i] = latest_message_to_send.charAt(i);
   }
   cipher_length = i;
   if(cipher_length % 16 == 0)
@@ -2895,12 +2867,12 @@ void encode_latest_message_to_send()
 
   base64_length = base64_encode( (char *) cipher, (char *) plain, cipher_length + 16);
   cipher[base64_length] = '\0';
-  gprs_latest_message_to_send = "$FHS:";
-  gprs_latest_message_to_send += float_hub_id;
-  gprs_latest_message_to_send += "$,";
+  latest_message_to_send = "$FHS:";
+  latest_message_to_send += float_hub_id;
+  latest_message_to_send += "$,";
   for(i = 0; i < base64_length; i++)
   {
-    gprs_latest_message_to_send += (char) cipher[i];
+    latest_message_to_send += (char) cipher[i];
   }
   
   //
