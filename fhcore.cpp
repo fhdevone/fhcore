@@ -23,6 +23,9 @@
   Brought in encrypted/$FHS code that was working back in July and made it trunk
   It encrypts content using aes-128-cbc encryption
 
+  May 2013
+  
+  Added NMEA input to the mix, so basic feature complete with NMEA, encryption, etc.
  
  
 */
@@ -37,29 +40,34 @@
 
 
 /*
-  Code version
+
 */
 
-#define  CODE_MAJOR_VERSION  0
-#define  CODE_MINOR_VERSION  1
+#define  FLOATHUB_PROTOCOL_VERSION 1
+#define  FLOATHUB_ENCRYPT_VERSION  1
 
 /*
-  Compile time debug flags
+  Compile time option/debug flags
 */
 
 //#define GPRS_DEBUG_ON
 //#define GPS_DEBUG_ON
 //#define PUMP_DEBUG_ON
+//#define EXECUTION_PATH_DEBUG_ON
+//#define NMEA_DEBUG_ON
+#define DEBUG_MEMORY_ON
+//#define BYPASS_AES_ON	
 
 /*
   Some AES variables
 */
 
+#define MAX_AES_CIPHER_LENGTH 256
 AES aes;
 byte iv[16];
 byte volatile_iv[16];
-byte plain[512];
-byte cipher[512];
+byte plain[MAX_AES_CIPHER_LENGTH];
+byte cipher[MAX_AES_CIPHER_LENGTH];
 
 /*
   Function protytpes
@@ -75,8 +83,10 @@ void echo_info(String some_info);
 void queue_detailed_message();
 void encode_latest_message_to_send(void);
 float eeprom_read_float(int address);
-void slide_memory(int start, int how_many, int what_width);
+void slide_memory(unsigned int start, unsigned int how_many, unsigned int what_width);
 void debug_info(String some_info);
+void debug_info(String some_info, float x);
+void debug_info(String some_info, int x);
 
 /*
   Define some EEPROM memory locations
@@ -140,6 +150,15 @@ String new_message = "";
 char   temp_string[20];  
 
 /*
+  Handy variables to use at various stages (better to be global, less memory)
+*/
+
+byte 	byte_zero, byte_one, byte_two, byte_three;
+int  	int_one, handy;
+float	float_one;
+unsigned int i;
+
+/*
   Toggleable flag for if we are trying to communicate
 */
 
@@ -155,11 +174,13 @@ unsigned long voltage_interval = 5000;           //  Check batteries/chargers ev
 unsigned long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
 unsigned long pump_interval = 300;               //  Check pump state every 300 milliseconds
 unsigned long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+//unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
+unsigned long idle_reporting_interval = 30000; 
 unsigned long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
 unsigned long console_interval = 500;            //  Check console for input every 400 milliseconds
 unsigned long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
 unsigned long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
+unsigned long nmea_update_interval = 100;        //  Update NMEA in serial line every 1/10 of a second
 boolean green_led_state = false;         	 //  For cycling on and off  
   
 unsigned long sensor_previous_timestamp = 0;
@@ -172,6 +193,7 @@ unsigned long previous_idle_timestamp = 0;
 unsigned long previous_console_timestamp = 0; 
 unsigned long console_previous_timestamp = 0;
 unsigned long led_previous_timestamp = 0;
+unsigned long nmea_previous_timestamp = 0;
 
 /*
   Is the device currently "active" (i.e. is the vessel in movement and sending high frequency updates)?
@@ -184,7 +206,7 @@ bool currently_active = true;
 */
   
 long gprs_watchdog_timestamp = 0;
-int  max_gprs_buffer = 300;
+#define	MAX_GPRS_READ_BUFFER	64
  
 enum connection_state
 {
@@ -227,9 +249,11 @@ float pressure;
   Some global variables used in parsing from the GPS module
 */
 
-int  max_gps_buffer = 300;
-String gps_parse_buffer;
-String gps_read_buffer;
+#define MAX_GPS_BUFFER	 200
+#define	MAX_NMEA_BUFFER	 100
+String gps_parse_buffer = "";
+String gps_read_buffer = "";
+String nmea_read_buffer = "";
 
 bool           gps_valid = false;
 String         gps_utc = "";          //  UTC time and date
@@ -273,6 +297,42 @@ pump_state pump_two_state = off;
 pump_state pump_three_state = off;
 
 /*
+  Global variables for NMEA data
+*/
+
+float	nmea_speed_water = -1.0;	// Speed through water in knots, < 0 means invalid/no reading (do not report)
+float	nmea_depth_water = -1.0;	// Depth of water below transducer, < 0 means invalid/not available
+float	nmea_wind_speed = -1.0;		// Speed of true wind in knots, < 0 invalid/not available
+float	nmea_wind_direction = -1.0;	// Angle of true wind in degrees, < 0 invalid/not available
+float 	nmea_water_temperature = -1.0;	// Temperature of water in _FARENHEIT_, < 0 invalid/not available
+
+
+
+/*
+    Handy for figuring out if something is making us run out of memory
+*/
+
+#ifdef DEBUG_MEMORY_ON
+extern int __bss_end;
+extern int *__brkval;
+void print_free_memory()
+{
+  int free_memory;
+  
+  if((int)__brkval == 0)
+  {
+    free_memory = ((int)&free_memory) - ((int)&__bss_end);
+  }
+  else
+  {
+    free_memory = ((int)&free_memory) - ((int)__brkval);
+  }
+
+  debug_info("Mem Free:", free_memory);
+}
+#endif
+
+/*
     Setup SPI for barometric and temperature
 */
 
@@ -314,8 +374,6 @@ void gprs_setup()
 
 void init_eeprom_memory()
 {
-
-  int i;
 
   //
   //  This function is called only during factory reset or intial startup
@@ -475,7 +533,7 @@ void init_eeprom_memory()
   //  Do this last to show EEPROM set
   //
 
-  for(int i = 0; i < 6; i++) {
+  for(i = 0; i < 6; i++) {
     EEPROM.write(i, 42); }
   
 
@@ -483,8 +541,6 @@ void init_eeprom_memory()
 
 void write_eeprom_memory()
 {
-
-  unsigned int i;
 
   //
   //  This just pushes current variables (e.g. float hub id) to EEPROM 
@@ -576,10 +632,10 @@ void read_eeprom_memory()
 
   boot_counter += 1;
   
-  byte byte_zero   = byte(boot_counter);
-  byte byte_one    = byte(boot_counter >> 8);
-  byte byte_two    = byte(boot_counter >> 16);
-  byte byte_three  = byte(boot_counter >> 24);
+  byte_zero   = byte(boot_counter);
+  byte_one    = byte(boot_counter >> 8);
+  byte_two    = byte(boot_counter >> 16);
+  byte_three  = byte(boot_counter >> 24);
   
   EEPROM.write(9, byte_zero);
   EEPROM.write(8, byte_one);
@@ -590,7 +646,6 @@ void read_eeprom_memory()
   //  Read floathub id
   //
   
-  int i;
   float_hub_id = "";
   for(i = 0; i < 8; i++)
   {
@@ -709,7 +764,14 @@ void setup()
   delay(200);
   
   //
-  //  Seed the randoim number generator
+  //	Setup NMEA in port
+  //
+  
+  Serial2.begin(4800);
+  
+  
+  //
+  //  Seed the random number generator
   //
   
   randomSeed(analogRead(0));
@@ -731,7 +793,7 @@ void setup()
   //
   
   int a = 0;
-  for(int i = 0; i < 6; i++)
+  for(i = 0; i < 6; i++)
   {
     a = EEPROM.read(i);
     if(a != 42)
@@ -771,10 +833,7 @@ void bmp_read()
 
 void parse_gps_buffer_as_rmc()
 {
-  //Serial.println("%%%%%%%% entering parse_gps_buffer_as_rmc()");
-  //Serial.print("Buffer: \"");
-  //Serial.print(gps_parse_buffer);
-  //Serial.println("\"");
+
   int time_start = 6;
   int time_break = gps_parse_buffer.indexOf('.', time_start + 1);
   int status_start = gps_parse_buffer.indexOf(',', time_start + 1);
@@ -799,11 +858,10 @@ void parse_gps_buffer_as_rmc()
       date_start < 0    ||    date_start >= (int) gps_parse_buffer.length()    ||
       var_start < 0     ||    var_start >= (int) gps_parse_buffer.length()     )
   {
-#ifdef GPS_DEBUG_ON
-      debug_info("Bad RMC string (below), will not parse");
+      #ifdef GPS_DEBUG_ON
+      debug_info("Bad RMC string");
       debug_info(gps_parse_buffer);
-#endif
-      Serial.println("YO MOMMA AFRICA!!!");
+      #endif
       return;
   }
       
@@ -851,19 +909,14 @@ void parse_gps_buffer_as_rmc()
   {
     setTime(gps_time_hour,gps_time_minute,gps_time_second,gps_time_day,gps_time_month,gps_time_year);
     gps_utc_unix = now();
-    //Serial.print("UNIX time: ");
-    //Serial.println(now());
-    //slide_memory(DETAILED_STATE_START_LOCATION, DETAILED_STATE_NUMB_LOCATIONS, DETAILED_STATE_DATA_WIDTH);
-    //slide_memory(PUMP_STATE_START_LOCATION, PUMP_STATE_NUMB_LOCATIONS, PUMP_STATE_DATA_WIDTH);
-    //Serial.println(now());
   }
   if(is_valid == "A")
   {
     if(!gps_valid) 
     {
-#ifdef GPS_DEBUG_ON
-      debug_info("Got gps fix");
-#endif
+      #ifdef GPS_DEBUG_ON
+      debug_info("Gps fix");
+      #endif
     }
     gps_valid = true;
   }
@@ -871,9 +924,9 @@ void parse_gps_buffer_as_rmc()
   {
     if(gps_valid)
     {
-#ifdef GPS_DEBUG_ON
-      debug_info("Lost gps fix");
-#endif
+      #ifdef GPS_DEBUG_ON
+      debug_info("Gps no fix");
+      #endif
     }
     gps_valid = false;
   }
@@ -891,16 +944,14 @@ void parse_gps_buffer_as_rmc()
   {
     memset(temp_string, 0, 20 * sizeof(char));
     gps_latitude.substring(0,2).toCharArray(temp_string, 3);
-    int  int_one = atoi(temp_string);
+    int_one = atoi(temp_string);
   
     memset(temp_string, 0, 20 * sizeof(char));
     gps_latitude.substring(3,11).toCharArray(temp_string, 9);
-    float  float_one = atof(temp_string);
+    float_one = atof(temp_string);
     
     float current_latitude = int_one + (float_one / 60.0);
     
-    //Serial.print("Lat: "); Serial.println(current_latitude,5);
-
     memset(temp_string, 0, 20 * sizeof(char));
     gps_longitude.substring(0,3).toCharArray(temp_string, 4);
     int_one = atoi(temp_string);
@@ -910,7 +961,6 @@ void parse_gps_buffer_as_rmc()
     float_one = atof(temp_string);
 
     float current_longitude = int_one + (float_one / 60.0);
-    //Serial.print("Lon: "); Serial.println(current_longitude,5);
     
     
     //
@@ -919,7 +969,7 @@ void parse_gps_buffer_as_rmc()
     
     float average_latitude = 0.0;
     float average_longitude = 0.0;
-    for(int i = 0; i < 5; i++)
+    for(i = 0; i < 5; i++)
     {
       average_latitude += latitude_history[i];
       average_longitude += longitude_history[i];
@@ -928,14 +978,12 @@ void parse_gps_buffer_as_rmc()
     average_latitude = average_latitude / 5.0;
     average_longitude = average_longitude / 5.0;
     
-    //Serial.print("Avg: "); Serial.print(average_latitude,5); Serial.print(", "); Serial.println(average_longitude,5);
-
     //
     //  Find pythagorean distance from average
     //
     
     float distance = sqrt(pow(average_latitude - current_latitude, 2) + pow(average_longitude - current_longitude, 2));
-    //Serial.print("Distance: "); Serial.println(distance, 10);
+
     if(distance > 0.0001)  //  1/10,000th of a degree is roughly 35 feet
     {
       currently_active = true;
@@ -950,7 +998,7 @@ void parse_gps_buffer_as_rmc()
     //  Slide averages
     //
     
-    for(int i = 0; i < 4; i++)
+    for(i = 0; i < 4; i++)
     {
       latitude_history[i] = latitude_history[i + 1];
       longitude_history[i] = longitude_history[i + 1];
@@ -963,17 +1011,11 @@ void parse_gps_buffer_as_rmc()
     currently_active = false;
   }
  
-  //Serial.println("%%%%%%%% leaving parse_gps_buffer_as_rmc()");
- 
 }
 
 void parse_gps_buffer_as_gga()
 {
 
-  //Serial.println("%%%%%%%% entering parse_gps_buffer_as_gga()");
-  //Serial.print("Buffer: \"");
-  //Serial.print(gps_parse_buffer);
-  //Serial.println("\"");
   int time_start = 6;
   int lat_start =  gps_parse_buffer.indexOf(',', time_start + 1);
   int nors_start =  gps_parse_buffer.indexOf(',', lat_start + 1);
@@ -996,11 +1038,10 @@ void parse_gps_buffer_as_gga()
       alt_start < 0  ||   alt_start >= (int) gps_parse_buffer.length()    ||
       altu_start < 0 ||   altu_start >= (int) gps_parse_buffer.length())
   {
-#ifdef GPS_DEBUG_ON
-      debug_info("Bad GGA string (below), will not parse");
+      #ifdef GPS_DEBUG_ON
+      debug_info("Bad GGA string");
       debug_info(gps_parse_buffer);
-#endif
-      Serial.println("Yo MAMMA ASIA!!!!");
+      #endif
       return;
   }
       
@@ -1027,36 +1068,31 @@ void parse_gps_buffer_as_gga()
   gps_hdp  = gps_parse_buffer.substring(hdp_start + 1, alt_start);
   gps_altitude  = gps_parse_buffer.substring(alt_start + 1, altu_start);
   
-  //Serial.println("%%%%%%%% leaving parse_gps_buffer_as_gga()");
 }
 
 void gps_read()
 {
 
-#ifdef GPS_DEBUG_ON
-  debug_info("------------------------- GPS START BUFFER ---------------------------------------------");
-  debug_info(gps_read_buffer);
-#endif
   bool new_data = false;
-  while(Serial3.available() && (int) gps_read_buffer.length() < max_gps_buffer)
+  while(Serial3.available() && (int) gps_read_buffer.length() < MAX_GPS_BUFFER)
   {
-     int incoming_byte = Serial3.read();
-     if(incoming_byte > 31 && incoming_byte < 127)
+     byte_zero = Serial3.read();
+     if(byte_zero > 31 && byte_zero < 127)
      {
-       gps_read_buffer += String((char) incoming_byte);
+       gps_read_buffer += String((char) byte_zero);
        new_data = true;
      }
   }
   
   int asterix_cut_point = gps_read_buffer.indexOf('*');
 
-  if(gps_read_buffer.length() > 0 && new_data == true)
+  if(gps_read_buffer.length() > 0)
   {
 
-#ifdef GPS_DEBUG_ON
-    debug_info("------------------------- GPS MID BUFFER ---------------------------------------------");
+    #ifdef GPS_DEBUG_ON
+    debug_info("---- GPS BUF----");
     debug_info(gps_read_buffer);
-#endif
+    #endif
   }
   
   if(asterix_cut_point > -1)
@@ -1088,16 +1124,10 @@ void gps_read()
   //  Out of sync? Garbled? Throw it out, start again
   //
   
-  if((int) gps_read_buffer.length() >= max_gps_buffer - 1 )
+  if((int) gps_read_buffer.length() >= MAX_GPS_BUFFER - 1 )
   {
     gps_read_buffer = "";
   }
-
-#ifdef GPS_DEBUG_ON
-  debug_info(gps_read_buffer);
-  debug_info("------------------------- END GPS READ BUFFER -----------------------------------------");
-#endif
-
 }
 
 void voltage_read()
@@ -1123,9 +1153,9 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
      }
      else if(state == off)
      {
-#ifdef PUMP_DEBUG_ON
+       #ifdef PUMP_DEBUG_ON
        debug_info("Pump turned on!");
-#endif
+       #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
        new_message += "$";
@@ -1151,9 +1181,9 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
      }
      else if(state == on)
      {
-#ifdef PUMP_DEBUG_ON
+       #ifdef PUMP_DEBUG_ON
        debug_info("Pump turned off!");
-#endif
+       #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
        new_message += "$";
@@ -1182,13 +1212,23 @@ void pump_read()
 }
 
 
+void append_float_to_string(String &the_string, float x)
+{
+  memset(temp_string, 0, 20 * sizeof(char));
+  dtostrf(x,4,2,temp_string);
+  the_string += String(temp_string);
+}
+
+void possibly_append_data(float value, float test, String tag)
+{
+  if(value > test)
+  {
+    new_message += tag;
+    append_float_to_string(new_message, value);
+  }
+}
 void report_state(bool console_only)
 {
-  //Serial.println("%%%%%%%% entering report_state");
-  //
-  //   Fill the latest GPRS message with the latest data to send
-  //
-  
   if(console_only)
   {
     new_message = "$FHC:";
@@ -1207,16 +1247,10 @@ void report_state(bool console_only)
   }
   
   new_message += ",T:";
-  memset(temp_string, 0, 20 * sizeof(char));
-  dtostrf(temperature,5,2,temp_string);
-  new_message += String(temp_string);
+  append_float_to_string(new_message, temperature);
 
   new_message += ",P:";
-  memset(temp_string, 0, 20 * sizeof(char));
-  dtostrf(pressure,4,2,temp_string);
-  new_message += String(temp_string);
-  
-
+  append_float_to_string(new_message, pressure);
 
   if(gps_valid == true)
   {
@@ -1245,54 +1279,33 @@ void report_state(bool console_only)
     new_message += gps_siv;
   }
 
-  if(battery_one > 0.2)
-  {
-    new_message += ",V:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(battery_one,4,2,temp_string);
-    new_message += String(temp_string);
-  }
+  possibly_append_data(battery_one, 0.2, ",V:");
+  possibly_append_data(battery_two, 0.2, ",W:");
+  possibly_append_data(battery_three, 0.2, ",X:");
 
-  if(battery_two > 0.2)
-  {
- 
-    new_message += ",W:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(battery_two,4,2,temp_string);
-    new_message += String(temp_string);
-  }
+  possibly_append_data(charger_one, 0.2, ",C:");
+  possibly_append_data(charger_two, 0.2, ",D:");
+  possibly_append_data(charger_three, 0.2, ",E:");
 
-  if(battery_three > 0.2)
-  {
-    new_message += ",X:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(battery_three,4,2,temp_string);
-    new_message += String(temp_string);
-  }
+  //
+  //	Add NMEA data
+  //
+  
+  possibly_append_data(nmea_speed_water, -0.5, ",R:");
+  possibly_append_data(nmea_depth_water, -0.5, ",F:");
+  possibly_append_data(nmea_wind_speed, -0.5, ",J:");
+  possibly_append_data(nmea_wind_direction, -0.5, ",K:");
+  possibly_append_data(nmea_water_temperature, -0.5, ",Y:");
 
-  if(charger_one > 0.2)
-  {
-    new_message += ",C:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(charger_one,4,2,temp_string);
-    new_message += String(temp_string);
-  }
 
-  if(charger_two > 0.2)
-  {
-    new_message += ",D:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(charger_two,4,2,temp_string);
-    new_message += String(temp_string);
-  }
+  //
+  //	HHHHAAAAAAACCCCCCKKKKKK
+  //
 
-  if(charger_three > 0.2)
-  {
-    new_message += ",E:";
-    memset(temp_string, 0, 20 * sizeof(char));
-    dtostrf(charger_three,4,2,temp_string);
-    new_message += String(temp_string);
-  }
+  print_free_memory();
+  new_message += "BIG LONG HACKY HACKY HCAKY HACKY HACK HACK TO SEE IF I CAN BREAK THE MEMORY LIMIT AND SEE IF MEMORY IS REALLY WHAT CAUSES THINGS TO B0RK";
+  print_free_memory();
+  
 
 
   if(!console_only)
@@ -1300,7 +1313,6 @@ void report_state(bool console_only)
     queue_detailed_message();
   }
   echo_info(new_message);
-  //Serial.println("%%%%%%%% leaving report_state");
 }
 
 void pop_off_pump_message()
@@ -1312,7 +1324,7 @@ void pop_off_pump_message()
   }
   
   int which_location = PUMP_STATE_START_LOCATION + (PUMP_STATE_DATA_WIDTH * (pump_state_count - 1));
-  int handy = 0;
+  handy = 0;
 
   unsigned long an_unsigned_long = (unsigned int) EEPROM.read(which_location + 3);
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 2) * 256;
@@ -1402,20 +1414,12 @@ void pop_off_detailed_message()
   }
   
   int which_location = DETAILED_STATE_START_LOCATION + (DETAILED_STATE_DATA_WIDTH * (detailed_state_count - 1));
-  int handy = 0;
+  handy = 0;
 
   unsigned long an_unsigned_long = (unsigned int) EEPROM.read(which_location + 3);
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 2) * 256;
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 1) * 65536;
   an_unsigned_long += (unsigned int) EEPROM.read(which_location + 0) * 16777216;
-  
-  /*
-  Serial.print(an_unsigned_long); Serial.println(" built from: ");
-  Serial.print(which_location + 3); Serial.print(" --> "); Serial.print((unsigned int) EEPROM.read(which_location + 3)); Serial.println(" * 1");
-  Serial.print(which_location + 2); Serial.print(" --> "); Serial.print((unsigned int) EEPROM.read(which_location + 2)); Serial.println(" * 256");
-  Serial.print(which_location + 1); Serial.print(" --> "); Serial.print((unsigned int) EEPROM.read(which_location + 1)); Serial.println(" * 65536");
-  Serial.print(which_location + 0); Serial.print(" --> "); Serial.print((unsigned int) EEPROM.read(which_location + 0)); Serial.println(" * 16777216");
-  */
   
   latest_message_to_send += "$FHA:";
   latest_message_to_send += float_hub_id;
@@ -1492,7 +1496,7 @@ void pop_off_detailed_message()
   //
   
   handy = EEPROM.read(which_location + 20);
-  float float_one = 0.0;
+  float_one = 0.0;
 
   if(handy & B00000100)
   {
@@ -1513,6 +1517,10 @@ void pop_off_detailed_message()
     memset(temp_string, 0, 20 * sizeof(char));
     float_one = eeprom_read_float(which_location + 10);
     dtostrf(float_one,7,5,temp_string);
+    if(float_one < 10.0)
+    {
+      latest_message_to_send += "0";
+    }
     latest_message_to_send += temp_string;
     if(handy & B00000001)
     {
@@ -1543,6 +1551,10 @@ void pop_off_detailed_message()
     memset(temp_string, 0, 20 * sizeof(char));
     float_one = eeprom_read_float(which_location + 16);
     dtostrf(float_one,7,5,temp_string);
+    if(float_one < 10.0)
+    {
+      latest_message_to_send += "0";
+    }
     latest_message_to_send += temp_string;
     if(handy & B00000001)
     {
@@ -1695,12 +1707,88 @@ void pop_off_detailed_message()
     dtostrf(float_one,4,2,temp_string);
     latest_message_to_send += temp_string; 
   }
+
+
+  //
+  //	NMEA speed through water
+  //
   
+  byte_zero=EEPROM.read(which_location + 39);
+  if(byte_zero != 128)
+  {
+    latest_message_to_send += ",R:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 38);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 39);
+  }
+
+  //
+  //	NMEA water depth
+  //
+  
+  byte_zero=EEPROM.read(which_location + 41);
+  if(byte_zero != 128)
+  {
+    latest_message_to_send += ",F:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 40);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 41);
+  }
+
+
+  //
+  //	NMEA wind speed
+  //
+  
+  byte_zero=EEPROM.read(which_location + 43);
+  if(byte_zero != 128)
+  {
+    latest_message_to_send += ",J:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 42);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 43);
+  }
+
+  //
+  //  Wind Direction
+  //
+  
+  
+  byte_zero=EEPROM.read(which_location + 46);
+  if(byte_zero != 128)
+  {
+    handy = EEPROM.read(which_location + 45);
+    handy += EEPROM.read(which_location + 44) * 256;
+    latest_message_to_send += ",K:";
+    latest_message_to_send += handy;
+    latest_message_to_send += ".";
+    handy=EEPROM.read(which_location + 46);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+  }
+
+  //
+  //	NMEA water temp
+  //
+  
+  byte_zero=EEPROM.read(which_location + 48);
+  if(byte_zero != 128)
+  {
+    latest_message_to_send += ",Y:";
+    latest_message_to_send += (int) EEPROM.read(which_location + 47);
+    latest_message_to_send += ".";
+    latest_message_to_send += (int) EEPROM.read(which_location + 48);
+  }
+
   
   detailed_state_count = detailed_state_count - 1;
   EEPROM.write(DETAILED_STATE_COUNTER_LOCATION, detailed_state_count);
-  
+
   encode_latest_message_to_send();
+
 }
 
 
@@ -1722,7 +1810,7 @@ float eeprom_read_float(int address)
 {
   float value = 0.0;
   byte* p = (byte*)(void*)&value;
-  for(int i = 0; i < 4; i++)
+  for(i = 0; i < 4; i++)
   {
     *p++ = EEPROM.read(address++);
   }
@@ -1732,7 +1820,7 @@ float eeprom_read_float(int address)
 void eeprom_write_float(int address, float value)
 {
   byte* p = (byte*)(void*)&value;
-  for(int i=0; i< 4; i++)
+  for(i=0; i< 4; i++)
   {
     EEPROM.write(address++,*p++);
   } 
@@ -1754,10 +1842,10 @@ void write_pump_state(int which_position, int which_pump, bool is_on)
   //  Write pump state values into EEPROM memory, starting with the UTC time/date
   //  
   
-  byte byte_zero   = byte(gps_utc_unix);
-  byte byte_one    = byte(gps_utc_unix >> 8);
-  byte byte_two    = byte(gps_utc_unix >> 16);
-  byte byte_three  = byte(gps_utc_unix >> 24);  
+  byte_zero   = byte(gps_utc_unix);
+  byte_one    = byte(gps_utc_unix >> 8);
+  byte_two    = byte(gps_utc_unix >> 16);
+  byte_three  = byte(gps_utc_unix >> 24);  
   
   EEPROM.write(which_position + 3, byte_zero);
   EEPROM.write(which_position + 2, byte_one);
@@ -1793,6 +1881,51 @@ void write_pump_state(int which_position, int which_pump, bool is_on)
 }
 
 
+void write_small_float_to_eeprom(float value, int address, int multiplier = 100)
+{
+  byte_zero = (int) (value);
+  byte_one  = (int)((value - ((int) value)) * multiplier);
+  EEPROM.write(address, byte_zero);
+  EEPROM.write(address + 1, byte_one);
+}
+
+void possibly_write_short_float(float value, int address)
+{
+  if(value > -0.5)
+  {
+    write_small_float_to_eeprom(value, address);
+  }
+  else
+  {
+    EEPROM.write(address, (byte) 0);
+    EEPROM.write(address + 1, (byte) 128);
+  }
+}
+
+void write_medium_float(float value, int address, int multiplier = 100)
+{
+  int_one = (int) (value);
+  byte_one = (int)((value - ((int) value)) *  multiplier);
+  
+  EEPROM.write(address, highByte(int_one));
+  EEPROM.write(address + 1, lowByte(int_one));
+  EEPROM.write(address + 2, byte_one);   
+}
+
+void possibly_write_eeprom_voltage(float voltage, float test, int address)
+{
+  if(voltage > test)
+  {
+    byte_one = (int) ((voltage / 12.0) * 100);
+    EEPROM.write(address, byte_one);
+  }
+  else
+  {
+    EEPROM.write(address, 0);
+  }  
+}
+
+
 void write_detailed_state(int which_position)
 {
 
@@ -1808,21 +1941,11 @@ void write_detailed_state(int which_position)
   //  Write current state values into EEPROM memory
   //  
   
-  byte byte_zero   = byte(gps_utc_unix);
-  byte byte_one    = byte(gps_utc_unix >> 8);
-  byte byte_two    = byte(gps_utc_unix >> 16);
-  byte byte_three  = byte(gps_utc_unix >> 24);
+  byte_zero   = byte(gps_utc_unix);
+  byte_one    = byte(gps_utc_unix >> 8);
+  byte_two    = byte(gps_utc_unix >> 16);
+  byte_three  = byte(gps_utc_unix >> 24);
  
-  /*
-  Serial.print(gps_utc_unix); Serial.println(" becomes: ");
-  
-  Serial.print(which_position + 3); Serial.print(" --> "); Serial.println((int)byte_zero);
-  Serial.print(which_position + 2); Serial.print(" --> "); Serial.println((int)byte_one);
-  Serial.print(which_position + 1); Serial.print(" --> "); Serial.println((int)byte_two);
-  Serial.print(which_position + 0); Serial.print(" --> "); Serial.println((int)byte_three);
-  */
-  
-  
   EEPROM.write(which_position + 3, byte_zero);
   EEPROM.write(which_position + 2, byte_one);
   EEPROM.write(which_position + 1, byte_two);
@@ -1850,14 +1973,14 @@ void write_detailed_state(int which_position)
       
   memset(temp_string, 0, 20 * sizeof(char));
   gps_latitude.substring(0,2).toCharArray(temp_string, 3);
-  int  int_one = atoi(temp_string);
+  int_one = atoi(temp_string);
   
   EEPROM.write(which_position + 8, highByte(int_one));
   EEPROM.write(which_position + 9, lowByte(int_one));
   
   memset(temp_string, 0, 20 * sizeof(char));
   gps_latitude.substring(3,11).toCharArray(temp_string, 9);
-  float  float_one = atof(temp_string);
+  float_one = atof(temp_string);
   
   eeprom_write_float(which_position + 10, float_one);
 
@@ -1903,12 +2026,7 @@ void write_detailed_state(int which_position)
   memset(temp_string, 0, 20 * sizeof(char));
   gps_altitude.substring(0,gps_altitude.length()).toCharArray(temp_string, 19);
   float_one = atof(temp_string);
-  int_one = (int) (float_one);
-  byte_one = (int)((float_one - ((int) float_one)) * 10);
-  
-  EEPROM.write(which_position + 21, highByte(int_one));
-  EEPROM.write(which_position + 22, lowByte(int_one));
-  EEPROM.write(which_position + 23, byte_one);  
+  write_medium_float(float_one, which_position + 21, 10);
     
 
   //  Horizontal Dillution of precision    
@@ -1916,33 +2034,22 @@ void write_detailed_state(int which_position)
   memset(temp_string, 0, 20 * sizeof(char));
   gps_hdp.substring(0,gps_hdp.length()).toCharArray(temp_string, 19);
   float_one = atof(temp_string);
-  byte_zero = (int) (float_one);
-  byte_one  = (int)((float_one - ((int) float_one)) * 10);
-  EEPROM.write(which_position + 24, byte_zero);
-  EEPROM.write(which_position + 25, byte_one);
-  
+  write_small_float_to_eeprom(float_one, which_position + 24, 10);
+
   //  Speed over ground
     
   memset(temp_string, 0, 20 * sizeof(char));
   gps_sog.substring(0,gps_sog.length()).toCharArray(temp_string, 19);
   float_one = atof(temp_string);
-  byte_zero = (int) (float_one);
-  byte_one  = (int)((float_one - ((int) float_one)) * 100);
-  EEPROM.write(which_position + 26, byte_zero);
-  EEPROM.write(which_position + 27, byte_one);
+  write_small_float_to_eeprom(float_one, which_position + 26);
     
   //  Bearing is an int (degrees ), plus first two decimal places in a byte. 
   
   memset(temp_string, 0, 20 * sizeof(char));
   gps_bearing_true.substring(0,gps_bearing_true.length()).toCharArray(temp_string, 19);
   float_one = atof(temp_string);
-  int_one = (int) (float_one);
-  byte_one = (int)((float_one - ((int) float_one)) * 100);
-  
-  EEPROM.write(which_position + 28, highByte(int_one));
-  EEPROM.write(which_position + 29, lowByte(int_one));
-  EEPROM.write(which_position + 30, byte_one);   
-   
+  write_medium_float(float_one, which_position + 28);
+
   //  Satellites in view is pretty easy
   
   memset(temp_string, 0, 20 * sizeof(char));
@@ -1950,132 +2057,50 @@ void write_detailed_state(int which_position)
   byte_one = atoi(temp_string);
   EEPROM.write(which_position + 31, byte_one);
     
-  //  Battery One, percentage of 12 volts
+  //  Batteries and Chargers, percentage of 12 volts
 
-  if(battery_one > 0.2)
-  {
-    byte_one = (int) ((battery_one / 12.0) * 100);
-    EEPROM.write(which_position + 32, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 32, 0);
-  }  
-  
-  //  Battery 2
-  
-  if(battery_two > 0.2)
-  {
-    byte_one = (int) ((battery_two / 12.0) * 100);
-    EEPROM.write(which_position + 33, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 33, 0);
-  }  
-    
-    
-  //  Battery 3
-  
-  if(battery_three > 0.2)
-  {
-    byte_one = (int) ((battery_three / 12.0) * 100);
-    EEPROM.write(which_position + 34, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 34, 0);
-  }  
-    
-   //  Charge 1
-  
-  if(charger_one > 0.2)
-  {
-    byte_one = (int) ((charger_one / 12.0) * 100);
-    EEPROM.write(which_position + 35, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 35, 0);
-  }  
-    
-   //  Charge 2
-  
-  if(charger_two > 0.2)
-  {
-    byte_one = (int) ((charger_two / 12.0) * 100);
-    EEPROM.write(which_position + 36, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 36, 0);
-  }  
-    
-   //  Charge 3
-  
-  if(charger_three > 0.2)
-  {
-    byte_one = (int) ((charger_three / 12.0) * 100);
-    EEPROM.write(which_position + 37, byte_one);
-  }
-  else
-  {
-    EEPROM.write(which_position + 37, 0);
-  }  
-    
-     
-  
-    
-  /*
-    Break GPS time/date into integer parts
-  */
+  possibly_write_eeprom_voltage(battery_one, 0.2, which_position + 32);
+  possibly_write_eeprom_voltage(battery_two, 0.2, which_position + 33);
+  possibly_write_eeprom_voltage(battery_three, 0.2, which_position + 34);
 
-  /*
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(0,2).toCharArray(temp_string, 3);
-  int  gps_time_hour = atoi(temp_string);
+  possibly_write_eeprom_voltage(charger_one, 0.2, which_position + 35);
+  possibly_write_eeprom_voltage(charger_two, 0.2, which_position + 36);
+  possibly_write_eeprom_voltage(charger_three, 0.2, which_position + 37);
   
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(2,4).toCharArray(temp_string, 3);
-  int  gps_time_minute = atoi(temp_string);
+  //	NMEA values
 
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(4,6).toCharArray(temp_string, 3);
-  int  gps_time_second = atoi(temp_string);
-  
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(6,8).toCharArray(temp_string, 3);  
-  int  gps_time_day = atoi(temp_string);
-  
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(8,10).toCharArray(temp_string, 3);
-  int  gps_time_month = atoi(temp_string);
-
-  memset(temp_string, 0, 20 * sizeof(char));
-  gps_utc.substring(10,14).toCharArray(temp_string, 5);
-  int  gps_time_year = atoi(temp_string);
-  */
+  possibly_write_short_float(nmea_speed_water, which_position + 38);
+  possibly_write_short_float(nmea_depth_water, which_position + 40);
+  possibly_write_short_float(nmea_wind_speed, which_position + 42);
+  if(nmea_wind_direction > -0.5)
+  {
+    write_medium_float(nmea_wind_direction, which_position + 44);
+  }
+  else
+  {
+    EEPROM.write(which_position + 46, 128);
+  }
+  possibly_write_short_float(nmea_water_temperature, which_position + 47);
 }
 
 void queue_detailed_message()
 {
-  //Serial.println("%%%%%%%% entering queue_message");
-  //latest_message_to_send = a_message;
   
   if(latest_message_to_send.length() == 0)
   {
+    print_free_memory();
+    Serial.println("AAAAAAA");
     latest_message_to_send = new_message;
+    Serial.println("BBBBBBB");
     encode_latest_message_to_send();
+    Serial.println("CCCCCCC");
+    print_free_memory();
   }
   else
   {
     //
     //  Need to store state in EEPROM if it's been an hour
     //  
-//    if(last_detailed_eeprom_write - now() > 60 * 60)
-
-    //Serial.print("Last eeprom write: "); Serial.println(last_detailed_eeprom_write);
-    //Serial.print("Now: "); Serial.println(now());
 
     if(now() - last_detailed_eeprom_write > 60 * 60)
     {
@@ -2091,43 +2116,13 @@ void queue_detailed_message()
           detailed_state_count++;
           EEPROM.write(DETAILED_STATE_COUNTER_LOCATION,detailed_state_count);
         }
-        //Serial.print("Queue: ");
-        //Serial.println((int)detailed_state_count);       
     }
-    
-    
-/*
-    bool stored_somewhere = false;
-    for(int i=0; i < message_stack_max_count; i++)
-    {
-      if(message_stack[i].length() == 0)
-      {
-        message_stack[i] = new_message;
-        stored_somewhere = true;
-        break;
-      }
-    }
-    if(!stored_somewhere)
-    {
-      latest_message_to_send = message_stack[0];
-      for(int i = 0; i < message_stack_max_count - 1; i++)
-      {
-        message_stack[i] = message_stack[i+1];
-      }
-      message_stack[message_stack_max_count - 1] = new_message;
-    }
-*/
   }
-  
-  //Serial.println("%%%%%%%% leaving queue_message");
-
 }
 
 
 void queue_pump_message(int which_pump, bool is_on)
 {
-  //Serial.println("%%%%%%%% entering queue_pump_message");
-  
   if(latest_message_to_send.length() == 0)
   {
     latest_message_to_send = new_message;
@@ -2150,17 +2145,15 @@ void queue_pump_message(int which_pump, bool is_on)
       pump_state_count++;
       EEPROM.write(PUMP_STATE_COUNTER_LOCATION,pump_state_count);
     }
-    //Serial.print("Pump Queue: ");
-    //Serial.println((int)pump_state_count);       
   }
 }
 
 
-void slide_memory(int start, int how_many, int what_width)
+void slide_memory(unsigned int start, unsigned int how_many, unsigned int what_width)
 {
-  for(int i = start; i < start + ((how_many - 1) * what_width); i = i + what_width)
+  for(i = start; i < start + ((how_many - 1) * what_width); i = i + what_width)
   {
-    for(int j = 0; j < what_width; j++)
+    for(unsigned int j = 0; j < what_width; j++)
     {
       EEPROM.write(i+j,EEPROM.read(i+j+what_width));
     }
@@ -2169,32 +2162,30 @@ void slide_memory(int start, int how_many, int what_width)
 
 void gprs_read()
 {
-  //Serial.println("%%%%%% Entering GPRS read %%%%%%%");
   if(gprs_communications_on == false)
   {
-    //Serial.println("%%%%%%%% Quiting GPRS read %%%%%%%%");
     return;
   }
   unsigned long current_timestamp = millis();
   String gprs_read_buffer;
 
-  while(Serial1.available() && (int) gprs_read_buffer.length() < max_gprs_buffer)
+  while(Serial1.available() && (int) gprs_read_buffer.length() < MAX_GPRS_READ_BUFFER)
   {
      gprs_read_buffer += (char) Serial1.read();
   }
   if(gprs_read_buffer.length() > 0)
   {
     
-#ifdef GPRS_DEBUG_ON
+    #ifdef GPRS_DEBUG_ON
     debug_info("\\/ GPRS-DEBUG  \\/");
     debug_info(gprs_read_buffer);
-#endif
+    #endif
               
     if(gprs_read_buffer.indexOf("CME ERROR") > 0)
     {
-#ifdef GPRS_DEBUG_ON
-      debug_info("*** Rebooting GPRS   ***");
-#endif
+      #ifdef GPRS_DEBUG_ON
+      debug_info("*** Reboot GPRS   ***");
+      #endif
       Serial1.println("AT+CFUN=0,1");
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
@@ -2239,9 +2230,9 @@ void gprs_read()
       gprs_connection_state = waiting_for_pdp_context_active;
       gprs_watchdog_timestamp = current_timestamp;
       Serial1.println("AT+CGACT=1,1");
-#ifdef GPRS_DEBUG_ON
+      #ifdef GPRS_DEBUG_ON
       debug_info("Waiting on ACT=1,1...");
-#endif
+      #endif
     }
     else if(gprs_connection_state == waiting_for_pdp_context_active && gprs_read_buffer.indexOf("OK") > 0)
     {
@@ -2263,9 +2254,9 @@ void gprs_read()
     {
       gprs_connection_state = we_be_connected;
       gprs_watchdog_timestamp = current_timestamp;
-#ifdef GPRS_DEBUG_ON
+      #ifdef GPRS_DEBUG_ON
       debug_info("We got internets!");
-#endif
+      #endif
     }
   }
   
@@ -2298,8 +2289,6 @@ void gprs_read()
           String formatted_message = "AT+SSTRSEND=1,\"";
           formatted_message += latest_message_to_send;
           formatted_message += "\"";
-          //Serial.print("Sending ");
-          //Serial.println(formatted_message);
           Serial1.println(formatted_message);
           gprs_communication_state = waiting_for_data_sent_ack;
           gprs_watchdog_timestamp = current_timestamp;
@@ -2324,8 +2313,6 @@ void gprs_read()
             String formatted_message = "AT+SSTRSEND=1,\"";
             formatted_message += latest_message_to_send;
             formatted_message += "\"";
-            //Serial.print("Sending::::::::::");
-            //Serial.println(formatted_message);
             Serial1.println(formatted_message);
             gprs_communication_state = waiting_for_data_sent_ack;
             gprs_watchdog_timestamp = current_timestamp;
@@ -2355,21 +2342,18 @@ void gprs_read()
   
   if(current_timestamp - gprs_watchdog_timestamp > gprs_watchdog_interval)
   {
-#ifdef GPRS_DEBUG_ON
+    #ifdef GPRS_DEBUG_ON
     debug_info("*** Rebooting GPRS (Watchdog)  ***");
-#endif
+    #endif
     Serial1.println("AT+CFUN=0,1");
     gprs_connection_state = waiting_for_sind;
     gprs_communication_state = idle;
     gprs_watchdog_timestamp = current_timestamp;
   }
-  //Serial.println("%%%%%%%% Done GPRS Read %%%%%%%%");
 }
 
 void console_read()
 {
-  //Serial.println("%%%%%%%% entering console_read");
-  unsigned int i;
   String console_buffer;
   String display_string;
   while(Serial.available() && console_buffer.length() < 255)
@@ -2436,9 +2420,9 @@ void console_read()
     {
       //help_info("GPRS on");
       gprs_communications_on = true;
-#ifdef GPRS_DEBUG_ON
+      #ifdef GPRS_DEBUG_ON
       debug_info("*** Rebooting GPRS (Watchdog)  ***");
-#endif
+      #endif
       Serial1.println("AT+CFUN=0,1");
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
@@ -2664,15 +2648,14 @@ void console_read()
       }
     }
   }  
-  //Serial.println("%%%%%%%% leaving console_read");
 }
 
 void display_current_variables()
 {
   new_message = "code=";
-  new_message += CODE_MAJOR_VERSION;
-  new_message += ".";
-  new_message += CODE_MINOR_VERSION;
+  new_message += FLOATHUB_PROTOCOL_VERSION;
+  new_message += ",";
+  new_message += FLOATHUB_ENCRYPT_VERSION;
   
   new_message += ",b=";
   new_message += boot_counter;
@@ -2683,7 +2666,6 @@ void display_current_variables()
   help_info(new_message);
   new_message = "";
 
-  int i;
   String line = "i=";
   line += float_hub_id;
   help_info(line);
@@ -2719,6 +2701,7 @@ void display_current_variables()
     line += " ";
   }
   help_info(line);
+  
 }
 
 void help_info(String some_info)
@@ -2743,6 +2726,32 @@ void debug_info(String some_info)
   Serial.print("$    ");
   Serial.println(some_info);
 }
+
+void debug_info(String some_info, float x)
+{
+  some_info.replace('\n','|');
+  some_info.replace('\r','|');
+  Serial.print("$FHD:");
+  Serial.print(float_hub_id);
+  Serial.print("$    ");
+  Serial.print(some_info);
+  Serial.print(" ");
+  Serial.println(x);
+}
+
+
+void debug_info(String some_info, int x)
+{
+  some_info.replace('\n','|');
+  some_info.replace('\r','|');
+  Serial.print("$FHD:");
+  Serial.print(float_hub_id);
+  Serial.print("$    ");
+  Serial.print(some_info);
+  Serial.print(" ");
+  Serial.println(x);
+}
+
 
 void update_leds()
 {
@@ -2792,15 +2801,149 @@ void update_leds()
   }
 }
 
+
+
+bool popout_nmea_value(String data_type, int comma_begin, int comma_end, float &target, bool convert_ctof = false)
+{
+  if(nmea_read_buffer.substring(3,6) == data_type &&
+     comma_begin > 0 &&
+     comma_end > 0 &&
+     comma_end > comma_begin)
+  {
+    if(comma_end - comma_begin > 1)
+    {
+      memset(temp_string, 0, 20 * sizeof(char));
+      nmea_read_buffer.substring(comma_begin + 1, comma_end).toCharArray(temp_string, 9);
+      target = atof(temp_string);
+      if(convert_ctof)
+      {
+        target = (target * 1.8) + 32.0;	// FARENHEIT
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+void parse_nmea_sentence()
+{
+
+//  Serial.print("NMEA: ");
+//  Serial.println(nmea_read_buffer);
+
+  int commas[8] = {-1, -1, -1, -1, -1, -1, -1 , -1};
+
+  if(nmea_read_buffer.length() < 10 	||
+     nmea_read_buffer.indexOf('$') != 0	||
+     nmea_read_buffer.indexOf('*') < 0)
+  {
+    return;
+  }
+  
+  //
+  //	Get an index of all comma locations in the sentence
+  //   
+  
+  commas[0] = nmea_read_buffer.indexOf(',');
+  for(i = 1; i < 8; i++)
+  {
+    if(commas[i - 1] < 0)
+    {
+      break;
+    }
+    commas[i] = nmea_read_buffer.indexOf(',', commas[i - 1] + 1);
+  }
+
+  //
+  //	Depth below transducer
+  //
+
+  if( popout_nmea_value("DBT", commas[2], commas[3], nmea_depth_water))
+  {
+    #ifdef NMEA_DEBUG_ON
+    debug_info("NMEA d water:", nmea_depth_water);
+    #endif    
+  }
+
+  //
+  //	Mean Temperature of Water
+  //
+
+
+  else if( popout_nmea_value("MTW", commas[0], commas[1], nmea_water_temperature, true))
+  {
+    #ifdef NMEA_DEBUG_ON
+    debug_info("NMEA w temp:", nmea_water_temperature);
+    #endif    
+  }
+
+  //
+  //	Speed Through Water
+  //
+
+  else if( popout_nmea_value("VHW", commas[4], commas[5], nmea_speed_water))
+  {
+    #ifdef NMEA_DEBUG_ON
+    debug_info("NMEA s water:", nmea_speed_water);
+    #endif    
+  }
+  
+  //
+  //	Wind Speed and direction if speed works
+  //
+  
+  else if(  popout_nmea_value("MWV", commas[2], commas[3], nmea_wind_speed))
+  {
+    #ifdef NMEA_DEBUG_ON
+    debug_info("NMEA w speed:", nmea_wind_speed);
+    #endif
+    if(	popout_nmea_value("MWV", commas[0], commas[1], nmea_wind_direction))
+    {
+      #ifdef NMEA_DEBUG_ON
+      debug_info("NMEA w direction:", nmea_wind_direction);
+      #endif
+    }
+  }
+}
+
+void update_nmea()
+{
+  while(Serial2.available() && (int) nmea_read_buffer.length() < MAX_NMEA_BUFFER)
+  {
+     int incoming_byte = Serial2.read();
+     if(incoming_byte == '\n')
+     {
+       parse_nmea_sentence();
+       nmea_read_buffer = "";
+     }
+     else if (incoming_byte == '\r')
+     {
+       // don't do anything
+     }
+     else
+     {
+       nmea_read_buffer += String((char) incoming_byte);
+     }
+  }
+  if((int) nmea_read_buffer.length() >= MAX_NMEA_BUFFER - 1 )
+  {
+    nmea_read_buffer = "";
+  }
+}
+
+
 void encode_latest_message_to_send()
 {
 
+  #ifdef BYPASS_AES_ON
+    return;
+  #endif
 
   //
   //  Take the latest message that is set up to go over GPRS and AES encode it, then Base-64 convert it
   //
     
-  int i, cipher_length, base64_length;
+  unsigned int cipher_length, base64_length;
  
   aes.set_key (float_hub_aes_key, 128) ;
   
@@ -2816,7 +2959,12 @@ void encode_latest_message_to_send()
   //
   
   
-  for(i = 0; i < (int) latest_message_to_send.length(); i++)
+  Serial.print("Stuffing ");
+  Serial.print(latest_message_to_send.length());
+  Serial.print(" into ");
+  Serial.println(MAX_AES_CIPHER_LENGTH);
+  
+  for(i = 0; i < latest_message_to_send.length(); i++)
   {
     plain[i] = latest_message_to_send.charAt(i);
   }
@@ -2880,6 +3028,21 @@ void encode_latest_message_to_send()
   // 
   aes.clean();  //  Not sure if that does anything useful or not.   
 
+}
+
+void zero_nmea_values()
+{
+  //
+  //	Can't have nmea values persisting long after they were read, so this
+  //	is called to nuke them after a console report
+  //
+  
+  nmea_speed_water = -1.0;
+  nmea_depth_water = -1.0;
+  nmea_wind_speed = -1.0;
+  nmea_wind_direction = -1.0;
+  nmea_water_temperature = -1.0;
+  
 }
 
 
@@ -2951,6 +3114,10 @@ void loop()
   {
     previous_console_timestamp = current_timestamp;
     report_state(true);
+    zero_nmea_values();
+    #ifdef DEBUG_MEMORY_ON
+    print_free_memory();
+    #endif
   }
   
   /*
@@ -2962,5 +3129,28 @@ void loop()
     led_previous_timestamp = current_timestamp;
     update_leds();
   }
+  
+  /*
+    Update anything coming in on the nmea in port
+  */
+  
+  if(current_timestamp - nmea_previous_timestamp > nmea_update_interval)
+  {
+    nmea_previous_timestamp = current_timestamp;
+    update_nmea();
+  }
+  
+  
+  
+  #ifdef EXECUTION_PATH_DEBUG_ON
+  if(random(0,100) < 10)
+  {
+    digitalWrite(RED_LED, HIGH);
+  }
+  else
+  {
+    digitalWrite(RED_LED, LOW);
+  }
+  #endif
 }
 
