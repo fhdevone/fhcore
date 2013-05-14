@@ -62,7 +62,7 @@
   Some AES variables
 */
 
-#define MAX_AES_CIPHER_LENGTH 256
+#define MAX_AES_CIPHER_LENGTH 1536
 AES aes;
 byte iv[16];
 byte volatile_iv[16];
@@ -327,7 +327,6 @@ void print_free_memory()
   {
     free_memory = ((int)&free_memory) - ((int)__brkval);
   }
-
   debug_info("Mem Free:", free_memory);
 }
 #endif
@@ -351,12 +350,12 @@ void gps_setup()
   Serial3.begin(4800);
   delay(1000);
   //Serial3.println("$PSTMNMEACONFIG,0,4800,66,1");
-  Serial3.println("$PSRF103,00,00,02,01*26");  //  GGA ON every 2 seconds
-  Serial3.println("$PSRF103,01,00,00,01*25");  //  GLL OFF
-  Serial3.println("$PSRF103,02,00,00,01*26");  //  GSA OFF
-  Serial3.println("$PSRF103,03,00,00,01*27");  //  GSV OFF
-  Serial3.println("$PSRF103,04,00,02,01*22");  //  RMC ON every 2 seconds
-  Serial3.println("$PSRF103,05,00,00,01*21");  //  VTG Off
+  Serial3.println(F("$PSRF103,00,00,02,01*26"));  //  GGA ON every 2 seconds
+  Serial3.println(F("$PSRF103,01,00,00,01*25"));  //  GLL OFF
+  Serial3.println(F("$PSRF103,02,00,00,01*26"));  //  GSA OFF
+  Serial3.println(F("$PSRF103,03,00,00,01*27"));  //  GSV OFF
+  Serial3.println(F("$PSRF103,04,00,02,01*22"));  //  RMC ON every 2 seconds
+  Serial3.println(F("$PSRF103,05,00,00,01*21"));  //  VTG Off
 }
 
 void gprs_setup()
@@ -408,7 +407,7 @@ void init_eeprom_memory()
 
   EEPROM.write(18, 'f');
   EEPROM.write(19, 'd');
-  EEPROM.write(20, 's');
+  EEPROM.write(20, 'r');
   EEPROM.write(21, '.');
   EEPROM.write(22, 'f');
   EEPROM.write(23, 'l');
@@ -526,7 +525,7 @@ void init_eeprom_memory()
   //	be changed on the console with f= frequency command.
   //
 
-  Serial1.println("AT+SBAND=7");
+  Serial1.println(F("AT+SBAND=7"));
   
 
   //
@@ -866,16 +865,17 @@ void parse_gps_buffer_as_rmc()
   }
       
      
-  gps_utc  = gps_parse_buffer.substring(time_start + 1, time_break);
-  gps_utc += gps_parse_buffer.substring(date_start + 1, var_start - 2);
-  gps_utc += "20";
-  gps_utc += gps_parse_buffer.substring(var_start - 2, var_start);
   
   String is_valid = gps_parse_buffer.substring(status_start + 1, lat_start);
   
   /*
     Break GPS time/date into integer parts
   */
+
+  gps_utc  = gps_parse_buffer.substring(time_start + 1, time_break);
+  gps_utc += gps_parse_buffer.substring(date_start + 1, var_start - 2);
+  gps_utc += "20";
+  gps_utc += gps_parse_buffer.substring(var_start - 2, var_start);
 
   memset(temp_string, 0, 20 * sizeof(char));
   gps_utc.substring(0,2).toCharArray(temp_string, 3);
@@ -905,13 +905,10 @@ void parse_gps_buffer_as_rmc()
     As long as the year is "reasonable", assume we have something close to right time
   */
 
-  if(gps_time_year > 2010)
+  if(gps_time_year > 2010 && is_valid == "A")
   {
     setTime(gps_time_hour,gps_time_minute,gps_time_second,gps_time_day,gps_time_month,gps_time_year);
     gps_utc_unix = now();
-  }
-  if(is_valid == "A")
-  {
     if(!gps_valid) 
     {
       #ifdef GPS_DEBUG_ON
@@ -932,9 +929,6 @@ void parse_gps_buffer_as_rmc()
   }
   
 
-  gps_sog  = gps_parse_buffer.substring(sog_start + 1, tmg_start);
-  gps_bearing_true  = gps_parse_buffer.substring(tmg_start + 1, date_start);
- 
   //
   //  Use running average of GPS positions to see if we are moving (active)
   //
@@ -942,6 +936,9 @@ void parse_gps_buffer_as_rmc()
 
   if(gps_valid)
   {
+    gps_sog  = gps_parse_buffer.substring(sog_start + 1, tmg_start);
+    gps_bearing_true  = gps_parse_buffer.substring(tmg_start + 1, date_start);
+ 
     memset(temp_string, 0, 20 * sizeof(char));
     gps_latitude.substring(0,2).toCharArray(temp_string, 3);
     int_one = atoi(temp_string);
@@ -1100,14 +1097,14 @@ void gps_read()
     int rmc_cut_point = gps_read_buffer.indexOf("$GPRMC,");
     int gga_cut_point = gps_read_buffer.indexOf("$GPGGA,");
 
-    if(rmc_cut_point > -1 && rmc_cut_point < asterix_cut_point)
+    if(rmc_cut_point > -1 && rmc_cut_point < asterix_cut_point && (gga_cut_point > asterix_cut_point || gga_cut_point < 0))
     {
       gps_parse_buffer = gps_read_buffer.substring(rmc_cut_point, asterix_cut_point + 1);
       gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3, (int) gps_read_buffer.length()), gps_read_buffer.length());
       parse_gps_buffer_as_rmc();
       gps_parse_buffer = "";
     }
-    else if(gga_cut_point > -1 && gga_cut_point < asterix_cut_point)
+    else if(gga_cut_point > -1 && gga_cut_point < asterix_cut_point && (rmc_cut_point > asterix_cut_point || rmc_cut_point < 0))
     {
       gps_parse_buffer = gps_read_buffer.substring(gga_cut_point, asterix_cut_point + 1);
       gps_read_buffer = gps_read_buffer.substring(min(asterix_cut_point + 3, (int) gps_read_buffer.length()), gps_read_buffer.length());
@@ -1302,11 +1299,7 @@ void report_state(bool console_only)
   //	HHHHAAAAAAACCCCCCKKKKKK
   //
 
-  print_free_memory();
   new_message += "BIG LONG HACKY HACKY HCAKY HACKY HACK HACK TO SEE IF I CAN BREAK THE MEMORY LIMIT AND SEE IF MEMORY IS REALLY WHAT CAUSES THINGS TO B0RK";
-  print_free_memory();
-  
-
 
   if(!console_only)
   {
@@ -2088,13 +2081,8 @@ void queue_detailed_message()
   
   if(latest_message_to_send.length() == 0)
   {
-    print_free_memory();
-    Serial.println("AAAAAAA");
     latest_message_to_send = new_message;
-    Serial.println("BBBBBBB");
     encode_latest_message_to_send();
-    Serial.println("CCCCCCC");
-    print_free_memory();
   }
   else
   {
@@ -2186,7 +2174,7 @@ void gprs_read()
       #ifdef GPRS_DEBUG_ON
       debug_info("*** Reboot GPRS   ***");
       #endif
-      Serial1.println("AT+CFUN=0,1");
+      Serial1.println(F("AT+CFUN=0,1"));
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
       gprs_watchdog_timestamp = current_timestamp;
@@ -2195,7 +2183,7 @@ void gprs_read()
     {
       gprs_connection_state = waiting_for_gprs_attachment;
       gprs_watchdog_timestamp = current_timestamp;
-      Serial1.println("AT+CGATT?");
+      Serial1.println(F("AT+CGATT?"));
     }
     else if(gprs_read_buffer.indexOf("+SIND:") > 0)
     {
@@ -2212,7 +2200,7 @@ void gprs_read()
     }
     else if(gprs_connection_state == waiting_for_gprs_attachment)
     {
-      Serial1.println("AT+CGATT?");
+      Serial1.println(F("AT+CGATT?"));
     }
     else if(gprs_connection_state == waiting_for_pdp_ack && gprs_read_buffer.indexOf("OK") > 0)
     {
@@ -2229,7 +2217,7 @@ void gprs_read()
     {
       gprs_connection_state = waiting_for_pdp_context_active;
       gprs_watchdog_timestamp = current_timestamp;
-      Serial1.println("AT+CGACT=1,1");
+      Serial1.println(F("AT+CGACT=1,1"));
       #ifdef GPRS_DEBUG_ON
       debug_info("Waiting on ACT=1,1...");
       #endif
@@ -2246,7 +2234,7 @@ void gprs_read()
     }
     else if(gprs_connection_state == waiting_for_remote_host_ack && gprs_read_buffer.indexOf("OK") > 0)
     {
-      Serial1.println("AT+SDATARXMD=1,1");
+      Serial1.println(F("AT+SDATARXMD=1,1"));
       gprs_connection_state =  waiting_for_string_format_ack;
       gprs_watchdog_timestamp = current_timestamp;
     }
@@ -2272,13 +2260,13 @@ void gprs_read()
       }
       else if(gprs_communication_state == idle && latest_message_to_send.length() > 0)
       {
-        Serial1.println("AT+SDATASTART=1,1");
+        Serial1.println(F("AT+SDATASTART=1,1"));
         gprs_communication_state = waiting_for_socket_ack;
         gprs_watchdog_timestamp = current_timestamp;
       }
       else if(gprs_communication_state == waiting_for_socket_ack && gprs_read_buffer.indexOf("OK") > 0)
       {
-        Serial1.println("AT+SDATASTATUS=1");
+        Serial1.println(F("AT+SDATASTATUS=1"));
         gprs_communication_state = waiting_for_socket_connection;
         gprs_watchdog_timestamp = current_timestamp;
       }
@@ -2295,7 +2283,7 @@ void gprs_read()
         }
         else
         {
-          Serial1.println("AT+SDATASTATUS=1");
+          Serial1.println(F("AT+SDATASTATUS=1"));
         }
       }
       else if(gprs_communication_state == waiting_for_data_sent_ack && gprs_read_buffer.indexOf("OK") > 0)
@@ -2321,12 +2309,12 @@ void gprs_read()
           {
             gprs_communication_state = waiting_for_socket_close_ack;
             gprs_watchdog_timestamp = current_timestamp;
-            Serial1.println("AT+SDATASTART=1,0");
+            Serial1.println(F("AT+SDATASTART=1,0"));
           }
         }
         else //(gprs_read_buffer.indexOf("+STCPD:") > 0)
         {
-          Serial1.println("AT+SDATAREAD=1");
+          Serial1.println(F("AT+SDATAREAD=1"));
         }
       }
       else if(gprs_communication_state == waiting_for_socket_close_ack && gprs_read_buffer.indexOf("OK") > 0)
@@ -2345,7 +2333,7 @@ void gprs_read()
     #ifdef GPRS_DEBUG_ON
     debug_info("*** Rebooting GPRS (Watchdog)  ***");
     #endif
-    Serial1.println("AT+CFUN=0,1");
+    Serial1.println(F("AT+CFUN=0,1"));
     gprs_connection_state = waiting_for_sind;
     gprs_communication_state = idle;
     gprs_watchdog_timestamp = current_timestamp;
@@ -2423,7 +2411,7 @@ void console_read()
       #ifdef GPRS_DEBUG_ON
       debug_info("*** Rebooting GPRS (Watchdog)  ***");
       #endif
-      Serial1.println("AT+CFUN=0,1");
+      Serial1.println(F("AT+CFUN=0,1"));
       gprs_connection_state = waiting_for_sind;
       gprs_communication_state = idle;
       gprs_watchdog_timestamp = millis();
@@ -2441,7 +2429,7 @@ void console_read()
         help_info("Doing factory reset ...");
         init_eeprom_memory();
         read_eeprom_memory();
-        Serial1.println("AT+CFUN=0,1");
+        Serial1.println(F("AT+CFUN=0,1"));
         gprs_connection_state = waiting_for_sind;
         gprs_communication_state = idle;
         gprs_watchdog_timestamp = millis();
@@ -2635,7 +2623,7 @@ void console_read()
           new_value = console_buffer[2];
           if(new_value < 0 || new_value > 8)
           {
-            Serial1.print("AT+SBAND=");
+            Serial1.print(F("AT+SBAND="));
             Serial1.println((char) new_value);
             display_string = "f=";
             display_string += (char) new_value;
@@ -2706,9 +2694,9 @@ void display_current_variables()
 
 void help_info(String some_info)
 {
-   Serial.print("$FHH:");
+   Serial.print(F("$FHH:"));
    Serial.print(float_hub_id);
-   Serial.print("$    ");
+   Serial.print(F("$    "));
    Serial.println(some_info);
 }
 
@@ -2721,9 +2709,9 @@ void debug_info(String some_info)
 {
   some_info.replace('\n','|');
   some_info.replace('\r','|');
-  Serial.print("$FHD:");
+  Serial.print(F("$FHD:"));
   Serial.print(float_hub_id);
-  Serial.print("$    ");
+  Serial.print(F("$    "));
   Serial.println(some_info);
 }
 
@@ -2731,11 +2719,11 @@ void debug_info(String some_info, float x)
 {
   some_info.replace('\n','|');
   some_info.replace('\r','|');
-  Serial.print("$FHD:");
+  Serial.print(F("$FHD:"));
   Serial.print(float_hub_id);
-  Serial.print("$    ");
+  Serial.print(F("$    "));
   Serial.print(some_info);
-  Serial.print(" ");
+  Serial.print(F(" "));
   Serial.println(x);
 }
 
@@ -2744,11 +2732,11 @@ void debug_info(String some_info, int x)
 {
   some_info.replace('\n','|');
   some_info.replace('\r','|');
-  Serial.print("$FHD:");
+  Serial.print(F("$FHD:"));
   Serial.print(float_hub_id);
-  Serial.print("$    ");
+  Serial.print(F("$    "));
   Serial.print(some_info);
-  Serial.print(" ");
+  Serial.print(F(" "));
   Serial.println(x);
 }
 
@@ -2934,6 +2922,10 @@ void update_nmea()
 
 void encode_latest_message_to_send()
 {
+  Serial.print(F("Stuffing "));
+  Serial.print(latest_message_to_send.length());
+  Serial.print(F(" into "));
+  Serial.println(MAX_AES_CIPHER_LENGTH);
 
   #ifdef BYPASS_AES_ON
     return;
@@ -2952,17 +2944,15 @@ void encode_latest_message_to_send()
     iv[i] = random(0, 256);
     volatile_iv[i] = iv[i];
   }
-  
+
+  Serial.println(F("StuffAAAAA"));
+  print_free_memory();  
 
   //
   //  Copy current gprs message to plain
   //
   
   
-  Serial.print("Stuffing ");
-  Serial.print(latest_message_to_send.length());
-  Serial.print(" into ");
-  Serial.println(MAX_AES_CIPHER_LENGTH);
   
   for(i = 0; i < latest_message_to_send.length(); i++)
   {
@@ -2986,12 +2976,20 @@ void encode_latest_message_to_send()
     cipher_length += i;
   }
 
+  Serial.println(F("StuffBBBBB"));
+  print_free_memory();  
+
   //
   //  Encrypt current message with AES CBC
   // 
- 
+
+  Serial.print("Going to cbc_encrypt with cipher_length of ");
+  Serial.println(cipher_length); 
   aes.cbc_encrypt (plain, cipher,  cipher_length / 4, volatile_iv) ;
   
+  Serial.println(F("StuffCCCCC"));
+  //print_free_memory();  
+
   //
   //  Now we reuse the plain text array to store cipher with the 
   //  initialization vector at the beginning
@@ -3002,18 +3000,26 @@ void encode_latest_message_to_send()
   {
     plain[i] = iv[i];
   }
+
+  Serial.println(F("Stuffcdcdcd"));
+  //print_free_memory();  
   
   for(i = 0; i < cipher_length; i++)
   {
     plain[16 + i] = cipher[i];
   }
   
+
   //
   //  Now convert that long line of bytes in plain to base 64, recylcing the cipher array to hold it
   //
   
+  Serial.println(F("StuffDDDDD"));
+  //print_free_memory();  
 
   base64_length = base64_encode( (char *) cipher, (char *) plain, cipher_length + 16);
+  Serial.print("Blowup: ");
+  Serial.println(base64_length);
   cipher[base64_length] = '\0';
   latest_message_to_send = "$FHS:";
   latest_message_to_send += float_hub_id;
@@ -3023,10 +3029,15 @@ void encode_latest_message_to_send()
     latest_message_to_send += (char) cipher[i];
   }
   
+  Serial.println(F("StuffEEEEE"));
+  print_free_memory();  
   //
   //  Clean up?
   // 
   aes.clean();  //  Not sure if that does anything useful or not.   
+
+  Serial.println(F("StuffFFFFF"));
+  //print_free_memory();  
 
 }
 
@@ -3100,6 +3111,7 @@ void loop()
     {
       previous_active_timestamp = current_timestamp;
       report_state(false);
+      zero_nmea_values();
     }
   }
   else
@@ -3108,13 +3120,13 @@ void loop()
     {
       previous_idle_timestamp = current_timestamp;
       report_state(false);
+      zero_nmea_values();
     }
   }
   if(current_timestamp - previous_console_timestamp >  console_reporting_interval)
   {
     previous_console_timestamp = current_timestamp;
     report_state(true);
-    zero_nmea_values();
     #ifdef DEBUG_MEMORY_ON
     print_free_memory();
     #endif
