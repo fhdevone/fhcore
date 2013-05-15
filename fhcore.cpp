@@ -8,25 +8,28 @@
  
   Nov. 6  2012
   
-  Working _extremely_ well now, including active sensor, data storage when GPRS unavailable, etc.
-  Remaining task; cleanout enough string stuff, then implement NMEA input on Serial2.
+  Working _extremely_ well now, including active sensor, data storage when
+  GPRS unavailable, etc.  Remaining task; cleanout enough string stuff, then
+  implement NMEA input on Serial2.
 
 
  
   March, 2013
 
-  Moved to a proper text-based build environment and versioning system on git-hub.
+  Moved to a proper text-based build environment and versioning system on
+  git-hub.
 
 
   April, 2013
   
-  Brought in encrypted/$FHS code that was working back in July and made it trunk
-  It encrypts content using aes-128-cbc encryption
+  Brought in encrypted/$FHS code that was working back in July and made it
+  trunk It encrypts content using aes-128-cbc encryption
 
   May 2013
   
-  Added NMEA input to the mix, so basic feature complete with NMEA, encryption, etc.
- 
+  Added NMEA input to the mix, so basic feature complete with NMEA,
+  encryption, etc.  Added protocol/encryption version info to the protocol
+  itself, plus numbering of pumps, batteries and chargers. 
  
 */
 
@@ -40,11 +43,13 @@
 
 
 /*
-
+  Anything which changes what the Floathub Data Receiver (fdr) needs to do
+  to parse data should bump one these settings (if it's an enryption change,
+  it's obviously the second one
 */
 
 #define  FLOATHUB_PROTOCOL_VERSION 1
-#define  FLOATHUB_ENCRYPT_VERSION  1
+#define  FLOATHUB_ENCRYPT_VERSION  2
 
 /*
   Compile time option/debug flags
@@ -55,7 +60,7 @@
 //#define PUMP_DEBUG_ON
 //#define EXECUTION_PATH_DEBUG_ON
 //#define NMEA_DEBUG_ON
-#define DEBUG_MEMORY_ON
+//#define DEBUG_MEMORY_ON
 //#define BYPASS_AES_ON	
 
 /*
@@ -102,19 +107,6 @@ void debug_info(String some_info, int x);
 #define  DETAILED_STATE_START_LOCATION    441
 #define  DETAILED_STATE_DATA_WIDTH        49
 #define  DETAILED_STATE_NUMB_LOCATIONS    74
-
-
-/*
-  ID and connection values
-*/
-
-//  String        default_float_hub_id           = "throwout";
-//  String        default_float_hub_server       = "fds.floathub.net";
-//  unsigned int  default_float_hub_server_port  = 44;
-//  String        default_gprs_apn               = "apn.name";
-//  String        default_gprs_username          = "username";
-//  String        default_gprs_password          = "password";
-
 
 
 /*
@@ -1155,15 +1147,17 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
        #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
+       new_message += ":";
+       new_message += FLOATHUB_PROTOCOL_VERSION;
        new_message += "$";
        if(gps_valid || timeStatus() != timeNotSet)
        {
          new_message += ",U:";
          new_message += gps_utc;          
        }
-       new_message += ",P:";
+       new_message += ",P";
        new_message += pump_number;
-       new_message += "1";
+       new_message += ":1";
        
        queue_pump_message(1,true);
        echo_info(new_message);
@@ -1183,6 +1177,8 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
        #endif
        new_message = "$FHB:";
        new_message += float_hub_id;
+       new_message += ":";
+       new_message += FLOATHUB_PROTOCOL_VERSION;
        new_message += "$";
 
        if(gps_valid|| timeStatus() != timeNotSet)
@@ -1190,9 +1186,9 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
          new_message += ",U:";
          new_message += gps_utc;          
        }
-       new_message += ",P:";
+       new_message += ",P";
        new_message += pump_number;
-       new_message += "0";
+       new_message += ":0";
        queue_pump_message(1,0);
        echo_info(new_message);
        state = off;
@@ -1236,6 +1232,8 @@ void report_state(bool console_only)
   }
 
   new_message += float_hub_id;
+  new_message += ":";
+  new_message += FLOATHUB_PROTOCOL_VERSION;
   new_message += "$";
   if(gps_valid == true || timeStatus() != timeNotSet )
   {
@@ -1276,13 +1274,13 @@ void report_state(bool console_only)
     new_message += gps_siv;
   }
 
-  possibly_append_data(battery_one, 0.2, ",V:");
-  possibly_append_data(battery_two, 0.2, ",W:");
-  possibly_append_data(battery_three, 0.2, ",X:");
+  possibly_append_data(battery_one, 0.2, ",V1:");
+  possibly_append_data(battery_two, 0.2, ",V2:");
+  possibly_append_data(battery_three, 0.2, ",V3:");
 
-  possibly_append_data(charger_one, 0.2, ",C:");
-  possibly_append_data(charger_two, 0.2, ",D:");
-  possibly_append_data(charger_three, 0.2, ",E:");
+  possibly_append_data(charger_one, 0.2, ",C1:");
+  possibly_append_data(charger_two, 0.2, ",C2:");
+  possibly_append_data(charger_three, 0.2, ",C3:");
 
   //
   //	Add NMEA data
@@ -1293,13 +1291,6 @@ void report_state(bool console_only)
   possibly_append_data(nmea_wind_speed, -0.5, ",J:");
   possibly_append_data(nmea_wind_direction, -0.5, ",K:");
   possibly_append_data(nmea_water_temperature, -0.5, ",Y:");
-
-
-  //
-  //	HHHHAAAAAAACCCCCCKKKKKK
-  //
-
-  new_message += "BIG LONG HACKY HACKY HCAKY HACKY HACK HACK TO SEE IF I CAN BREAK THE MEMORY LIMIT AND SEE IF MEMORY IS REALLY WHAT CAUSES THINGS TO B0RK";
 
   if(!console_only)
   {
@@ -1326,6 +1317,8 @@ void pop_off_pump_message()
     
   latest_message_to_send += "$FHB:";
   latest_message_to_send += float_hub_id;
+  latest_message_to_send += ":";
+  latest_message_to_send += FLOATHUB_PROTOCOL_VERSION;
   latest_message_to_send += "$,U:";
   
   //
@@ -1369,7 +1362,7 @@ void pop_off_pump_message()
   //
   
   handy = EEPROM.read(which_location + 4);
-  latest_message_to_send += ",P:";
+  latest_message_to_send += ",P";
   if((handy & B00000100) && (handy & B00000010))
   {
     latest_message_to_send += "3";
@@ -1385,11 +1378,11 @@ void pop_off_pump_message()
   
   if(handy & B00000001)
   {
-     latest_message_to_send += "1";
+     latest_message_to_send += ":1";
   }
   else
   {
-     latest_message_to_send += "0";
+     latest_message_to_send += ":0";
   }
   
   pump_state_count = pump_state_count - 1;
@@ -1416,6 +1409,8 @@ void pop_off_detailed_message()
   
   latest_message_to_send += "$FHA:";
   latest_message_to_send += float_hub_id;
+  latest_message_to_send += ":";
+  latest_message_to_send += FLOATHUB_PROTOCOL_VERSION;
   latest_message_to_send += "$,U:";
   
   //
@@ -1624,7 +1619,7 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 32);
    if(handy > 0)
    {
-     latest_message_to_send += ",V:";
+     latest_message_to_send += ",V1:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
@@ -1638,7 +1633,7 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 33);
    if(handy > 0)
    {
-     latest_message_to_send += ",W:";
+     latest_message_to_send += ",V2:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
@@ -1652,7 +1647,7 @@ void pop_off_detailed_message()
    handy=EEPROM.read(which_location + 34);
    if(handy > 0)
    {
-     latest_message_to_send += ",X:";
+     latest_message_to_send += ",V3:";
      float_one = ((handy + 1.0) / 100.0) * 12.0;
      memset(temp_string, 0, 20 * sizeof(char));
      dtostrf(float_one,4,2,temp_string);
@@ -1666,7 +1661,7 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 35);
   if(handy > 0)   
   {
-    latest_message_to_send += ",C:";
+    latest_message_to_send += ",C1:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
@@ -1680,7 +1675,7 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 36);
   if(handy > 0)
   {
-    latest_message_to_send += ",D:";
+    latest_message_to_send += ",C2:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
@@ -1694,7 +1689,7 @@ void pop_off_detailed_message()
   handy=EEPROM.read(which_location + 37);
   if(handy > 0)
   {
-    latest_message_to_send += ",E:";
+    latest_message_to_send += ",C3:";
     float_one = ((handy + 1.0) / 100.0) * 12.0;
     memset(temp_string, 0, 20 * sizeof(char));
     dtostrf(float_one,4,2,temp_string);
@@ -2696,6 +2691,8 @@ void help_info(String some_info)
 {
    Serial.print(F("$FHH:"));
    Serial.print(float_hub_id);
+   Serial.print(F(":"));
+   Serial.print(FLOATHUB_PROTOCOL_VERSION);
    Serial.print(F("$    "));
    Serial.println(some_info);
 }
@@ -2705,40 +2702,37 @@ void echo_info(String some_info)
   Serial.println(some_info);
 }
 
-void debug_info(String some_info)
+void debug_info_core(String some_info)
 {
   some_info.replace('\n','|');
   some_info.replace('\r','|');
   Serial.print(F("$FHD:"));
   Serial.print(float_hub_id);
+  Serial.print(F(":"));
+  Serial.print(FLOATHUB_PROTOCOL_VERSION);
   Serial.print(F("$    "));
-  Serial.println(some_info);
+  Serial.print(some_info);
+}
+
+void debug_info(String some_info)
+{
+  debug_info_core(some_info);
+  Serial.println();
 }
 
 void debug_info(String some_info, float x)
 {
-  some_info.replace('\n','|');
-  some_info.replace('\r','|');
-  Serial.print(F("$FHD:"));
-  Serial.print(float_hub_id);
-  Serial.print(F("$    "));
-  Serial.print(some_info);
-  Serial.print(F(" "));
+  debug_info_core(some_info);
   Serial.println(x);
 }
 
 
 void debug_info(String some_info, int x)
 {
-  some_info.replace('\n','|');
-  some_info.replace('\r','|');
-  Serial.print(F("$FHD:"));
-  Serial.print(float_hub_id);
-  Serial.print(F("$    "));
-  Serial.print(some_info);
-  Serial.print(F(" "));
+  debug_info_core(some_info);
   Serial.println(x);
 }
+
 
 
 void update_leds()
@@ -2922,14 +2916,19 @@ void update_nmea()
 
 void encode_latest_message_to_send()
 {
-  Serial.print(F("Stuffing "));
-  Serial.print(latest_message_to_send.length());
-  Serial.print(F(" into "));
-  Serial.println(MAX_AES_CIPHER_LENGTH);
 
   #ifdef BYPASS_AES_ON
     return;
   #endif
+
+
+  #ifdef DEBUG_MEMORY_ON
+  for(i=0; i < 10; i++)
+  {
+    latest_message_to_send += " MEMORY STRESS TEST";
+  }
+  #endif
+
 
   //
   //  Take the latest message that is set up to go over GPRS and AES encode it, then Base-64 convert it
@@ -2945,15 +2944,10 @@ void encode_latest_message_to_send()
     volatile_iv[i] = iv[i];
   }
 
-  Serial.println(F("StuffAAAAA"));
-  print_free_memory();  
-
   //
   //  Copy current gprs message to plain
   //
-  
-  
-  
+    
   for(i = 0; i < latest_message_to_send.length(); i++)
   {
     plain[i] = latest_message_to_send.charAt(i);
@@ -2976,20 +2970,12 @@ void encode_latest_message_to_send()
     cipher_length += i;
   }
 
-  Serial.println(F("StuffBBBBB"));
-  print_free_memory();  
-
   //
   //  Encrypt current message with AES CBC
   // 
 
-  Serial.print("Going to cbc_encrypt with cipher_length of ");
-  Serial.println(cipher_length); 
   aes.cbc_encrypt (plain, cipher,  cipher_length / 4, volatile_iv) ;
   
-  Serial.println(F("StuffCCCCC"));
-  //print_free_memory();  
-
   //
   //  Now we reuse the plain text array to store cipher with the 
   //  initialization vector at the beginning
@@ -3000,10 +2986,6 @@ void encode_latest_message_to_send()
   {
     plain[i] = iv[i];
   }
-
-  Serial.println(F("Stuffcdcdcd"));
-  //print_free_memory();  
-  
   for(i = 0; i < cipher_length; i++)
   {
     plain[16 + i] = cipher[i];
@@ -3014,30 +2996,23 @@ void encode_latest_message_to_send()
   //  Now convert that long line of bytes in plain to base 64, recylcing the cipher array to hold it
   //
   
-  Serial.println(F("StuffDDDDD"));
-  //print_free_memory();  
-
   base64_length = base64_encode( (char *) cipher, (char *) plain, cipher_length + 16);
-  Serial.print("Blowup: ");
-  Serial.println(base64_length);
   cipher[base64_length] = '\0';
   latest_message_to_send = "$FHS:";
   latest_message_to_send += float_hub_id;
+  latest_message_to_send += ":";
+  latest_message_to_send += FLOATHUB_ENCRYPT_VERSION;
   latest_message_to_send += "$,";
   for(i = 0; i < base64_length; i++)
   {
     latest_message_to_send += (char) cipher[i];
   }
   
-  Serial.println(F("StuffEEEEE"));
-  print_free_memory();  
   //
   //  Clean up?
   // 
-  aes.clean();  //  Not sure if that does anything useful or not.   
 
-  Serial.println(F("StuffFFFFF"));
-  //print_free_memory();  
+  aes.clean();  //  Not sure if that does anything useful or not.   
 
 }
 
