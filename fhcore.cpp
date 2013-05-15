@@ -1159,7 +1159,7 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
        new_message += pump_number;
        new_message += ":1";
        
-       queue_pump_message(1,true);
+       queue_pump_message(pump_number,1);
        echo_info(new_message);
        state = on;       
      }
@@ -1189,7 +1189,7 @@ void individual_pump_read(int pump_number, pump_state &state, int analog_input)
        new_message += ",P";
        new_message += pump_number;
        new_message += ":0";
-       queue_pump_message(1,0);
+       queue_pump_message(pump_number,0);
        echo_info(new_message);
        state = off;
      }
@@ -1287,7 +1287,7 @@ void report_state(bool console_only)
   //
   
   possibly_append_data(nmea_speed_water, -0.5, ",R:");
-  possibly_append_data(nmea_depth_water, -0.5, ",F:");
+  possibly_append_data(nmea_depth_water, -0.5, ",D:");
   possibly_append_data(nmea_wind_speed, -0.5, ",J:");
   possibly_append_data(nmea_wind_direction, -0.5, ",K:");
   possibly_append_data(nmea_water_temperature, -0.5, ",Y:");
@@ -1717,7 +1717,7 @@ void pop_off_detailed_message()
   byte_zero=EEPROM.read(which_location + 41);
   if(byte_zero != 128)
   {
-    latest_message_to_send += ",F:";
+    latest_message_to_send += ",D:";
     latest_message_to_send += (int) EEPROM.read(which_location + 40);
     latest_message_to_send += ".";
     latest_message_to_send += (int) EEPROM.read(which_location + 41);
