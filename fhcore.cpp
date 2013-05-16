@@ -40,6 +40,7 @@
 #include <Time.h>
 #include "libs/AES/AES.h"
 #include "libs/Base64/Base64.h"
+#include <avr/wdt.h>
 
 
 /*
@@ -160,20 +161,21 @@ bool gprs_communications_on = true;
     Overall timing parameters
 */
 
-unsigned long sensor_sample_interval = 20000;    //  Check temperature, pressure, every 20 seconds
-unsigned long gps_interval = 50;                 //  Read GPS serial every 1/20 second
-unsigned long voltage_interval = 5000;           //  Check batteries/chargers every 5 second
-unsigned long gprs_interval = 500;               //  Check GPRS every 500 milliseconds
-unsigned long pump_interval = 300;               //  Check pump state every 300 milliseconds
-unsigned long active_reporting_interval = 30000; //  When in use, report data every 30 seconds
-//unsigned long idle_reporting_interval = 600000;  //  When idle, report data every 10 minutes
-unsigned long idle_reporting_interval = 30000; 
-unsigned long console_reporting_interval = 5000; //  Report to USB console every 5 seconds  
-unsigned long console_interval = 500;            //  Check console for input every 400 milliseconds
-unsigned long gprs_watchdog_interval = 90000;    //  Reboot the GPRS module after 90 seconds of no progress
-unsigned long led_update_interval = 200;         //  Update the LED's every 200 miliseconds
-unsigned long nmea_update_interval = 100;        //  Update NMEA in serial line every 1/10 of a second
-boolean green_led_state = false;         	 //  For cycling on and off  
+unsigned long sensor_sample_interval = 20000;     //  Check temperature, pressure, every 20 seconds
+unsigned long gps_interval = 50;                  //  Read GPS serial every 1/20 second
+unsigned long voltage_interval = 5000;            //  Check batteries/chargers every 5 second
+unsigned long gprs_interval = 500;                //  Check GPRS every 500 milliseconds
+unsigned long pump_interval = 300;                //  Check pump state every 300 milliseconds
+unsigned long active_reporting_interval = 30000;  //  When in use, report data every 30 seconds
+//unsigned long idle_reporting_interval = 600000; 
+unsigned long idle_reporting_interval = 30000;    //  When idle, report data every 10 minutes
+unsigned long console_reporting_interval = 5000;  //  Report to USB console every 5 seconds  
+unsigned long console_interval = 500;             //  Check console for input every 400 milliseconds
+unsigned long gprs_watchdog_interval = 90000;     //  Reboot the GPRS module after 90 seconds of no progress
+unsigned long led_update_interval = 200;          //  Update the LED's every 200 miliseconds
+unsigned long nmea_update_interval = 100;         //  Update NMEA in serial line every 1/10 of a second
+boolean green_led_state = false;         	  //  For cycling on and off  
+unsigned long hardware_watchdog_interval = 60000; //  Do a hardware reset if we don't pat the dog every 60 seconds
   
 unsigned long sensor_previous_timestamp = 0;
 unsigned long gps_previous_timestamp = 0;
@@ -186,6 +188,7 @@ unsigned long previous_console_timestamp = 0;
 unsigned long console_previous_timestamp = 0;
 unsigned long led_previous_timestamp = 0;
 unsigned long nmea_previous_timestamp = 0;
+unsigned long hardware_watchdog_timestamp = 0;
 
 /*
   Is the device currently "active" (i.e. is the vessel in movement and sending high frequency updates)?
@@ -361,6 +364,33 @@ void gprs_setup()
   gprs_connection_state = waiting_for_sind;
   gprs_communication_state = idle;
   gprs_watchdog_timestamp = millis();
+}
+
+void watchdog_setup()
+{
+  cli(); 
+  wdt_reset();
+  MCUSR &= ~(1<<WDRF); 
+  // Enter Watchdog Configuration mode:
+  WDTCSR = (1<<WDCE) | (1<<WDE);
+  // Set Watchdog settings: interrupte enable, 0110 for timer
+  WDTCSR = (1<<WDIE) | (0<<WDP3) | (1<<WDP2) | (1<<WDP1) | (0<<WDP0);
+  sei();
+}
+
+void pat_the_watchdog()
+{
+  hardware_watchdog_timestamp = millis(); 
+}
+
+void(* resetFunc) (void) = 0; //declare reset function @ address 0
+
+ISR(WDT_vect) // Watchdog timer interrupt.
+{ 
+  if(millis() - hardware_watchdog_timestamp > hardware_watchdog_interval)
+  {
+    resetFunc();     				     // This will call location zero and cause a reboot.
+  }
 }
 
 void init_eeprom_memory()
@@ -805,6 +835,13 @@ void setup()
   
   bmp_read();
   
+  //
+  //	Setup hardware watchdog timer 
+  //
+  
+  watchdog_setup();
+  
+
   //
   //  Announce we are up
   //
@@ -3105,6 +3142,7 @@ void loop()
     #ifdef DEBUG_MEMORY_ON
     print_free_memory();
     #endif
+    pat_the_watchdog();	// Bump watchdog timer up to current time;
   }
   
   /*
