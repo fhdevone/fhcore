@@ -2119,10 +2119,10 @@ void queue_detailed_message()
   else
   {
     //
-    //  Need to store state in EEPROM if it's been an hour
+    //  Need to store state in EEPROM if it's been an hour or there's space to do so
     //  
 
-    if(now() - last_detailed_eeprom_write > 60 * 60)
+    if(now() - last_detailed_eeprom_write > 60 * 60 || detailed_state_count < DETAILED_STATE_NUMB_LOCATIONS)
     {
         last_detailed_eeprom_write = now();
         if(detailed_state_count >= DETAILED_STATE_NUMB_LOCATIONS)
