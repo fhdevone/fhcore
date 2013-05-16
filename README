@@ -1,11 +1,12 @@
 fhcore
 ======
 
-Core arduino code providing floathub functionality
+Core arduino code providing floathub functionality. See floathub.com for
+more information.
 
-You need a working arduino development environment, but thisproject is
-intended to be built on the command line. It uses the arduino-mk file
-developped by (http://ed.am/dev/make/arduino-mk). 
+You need a working arduino development environment, but this project is
+intended to be built on the command line.  It uses the arduino-mk file
+developped by (http://ed.am/dev/make/arduino-mk).
 
 To build, type:
 
