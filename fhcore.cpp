@@ -2,7 +2,7 @@
 /*
 
  FloatHub Arduino Code
- (c) 2011 Thor Sigvaldason
+ (c) 2011-2013 Modiot Labs
  (begun June 6, 2011)
  
  
@@ -46,7 +46,7 @@
 /*
   Anything which changes what the Floathub Data Receiver (fdr) needs to do
   to parse data should bump one these settings (if it's an enryption change,
-  it's obviously the second one
+  it's obviously the second one)
 */
 
 #define  FLOATHUB_PROTOCOL_VERSION 1
@@ -115,7 +115,7 @@ void debug_info(String some_info, int x);
 */
 
 String        float_hub_id;			// default: outofbox
-String        float_hub_server;			// default: fds.floathub.net
+String        float_hub_server;			// default: fdr.floathub.net
 unsigned int  float_hub_server_port;		// default: 44
 String        gprs_apn;				// default: apn.name
 String        gprs_username;			// default: username
@@ -3030,7 +3030,7 @@ void encode_latest_message_to_send()
   
 
   //
-  //  Now convert that long line of bytes in plain to base 64, recylcing the cipher array to hold it
+  //  Now convert that long line of bytes in plain to base 64, recycling the cipher array to hold it
   //
   
   base64_length = base64_encode( (char *) cipher, (char *) plain, cipher_length + 16);
