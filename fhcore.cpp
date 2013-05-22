@@ -41,6 +41,7 @@
 #include "libs/AES/AES.h"
 #include "libs/Base64/Base64.h"
 #include <avr/wdt.h>
+#include <util/crc16.h>
 
 
 /*
@@ -51,12 +52,13 @@
 
 #define  FLOATHUB_PROTOCOL_VERSION 1
 #define  FLOATHUB_ENCRYPT_VERSION  2
+#define  FLOATHUB_MODEL_DESCRIPTION "FC4"
 
 /*
   Compile time option/debug flags
 */
 
-//#define GPRS_DEBUG_ON
+#define GPRS_DEBUG_ON
 //#define GPS_DEBUG_ON
 //#define PUMP_DEBUG_ON
 //#define EXECUTION_PATH_DEBUG_ON
@@ -2261,6 +2263,9 @@ void gprs_read()
       host_string += "\",";
       host_string += String(float_hub_server_port);      
       Serial1.println(host_string);
+      #ifdef GPRS_DEBUG_ON
+      debug_info(host_string);
+      #endif
       gprs_connection_state = waiting_for_remote_host_ack;
       gprs_watchdog_timestamp = current_timestamp;
     }
@@ -2306,10 +2311,11 @@ void gprs_read()
       {
         if(gprs_read_buffer.indexOf("+SOCKSTATUS:  1,1") > 0)
         {
-          String formatted_message = "AT+SSTRSEND=1,\"";
-          formatted_message += latest_message_to_send;
-          formatted_message += "\"";
-          Serial1.println(formatted_message);
+          int packet_length = latest_message_to_send.length() + 2;
+          Serial1.print("AT+SDATATSEND=1,"+String(packet_length)+"\r");
+          delay(100);
+          Serial1.print(latest_message_to_send+"\r\n"); // Extra 2 bytes;
+          Serial1.write(26); // CTRL-Z, end of packet identifier for SMB-5100
           gprs_communication_state = waiting_for_data_sent_ack;
           gprs_watchdog_timestamp = current_timestamp;
         }
@@ -2330,10 +2336,13 @@ void gprs_read()
           pop_off_message_queue();
           if(latest_message_to_send.length() > 0)
           {
-            String formatted_message = "AT+SSTRSEND=1,\"";
-            formatted_message += latest_message_to_send;
-            formatted_message += "\"";
-            Serial1.println(formatted_message);
+            int packet_length = latest_message_to_send.length() + 2;
+            Serial1.print("AT+SDATATSEND=1,"+String(packet_length)+"\r");
+            delay(100);
+            Serial1.print(latest_message_to_send+"\r\n"); // Extra 2 bytes;
+            Serial1.write(26); // CTRL-Z, end of packet identifier for SMB-5100
+            gprs_communication_state = waiting_for_data_sent_ack;
+            gprs_watchdog_timestamp = current_timestamp;
             gprs_communication_state = waiting_for_data_sent_ack;
             gprs_watchdog_timestamp = current_timestamp;
           }
@@ -2674,9 +2683,11 @@ void display_current_variables()
 {
   new_message = "code=";
   new_message += FLOATHUB_PROTOCOL_VERSION;
-  new_message += ",";
+  new_message += ".";
   new_message += FLOATHUB_ENCRYPT_VERSION;
   
+  new_message += ",m=";
+  new_message += FLOATHUB_MODEL_DESCRIPTION;
   new_message += ",b=";
   new_message += boot_counter;
   new_message += ",dq=";
@@ -3044,7 +3055,7 @@ void encode_latest_message_to_send()
   {
     latest_message_to_send += (char) cipher[i];
   }
-  
+
   //
   //  Clean up?
   // 
