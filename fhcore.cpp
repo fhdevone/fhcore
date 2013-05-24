@@ -58,7 +58,7 @@
   Compile time option/debug flags
 */
 
-#define GPRS_DEBUG_ON
+//#define GPRS_DEBUG_ON
 //#define GPS_DEBUG_ON
 //#define PUMP_DEBUG_ON
 //#define EXECUTION_PATH_DEBUG_ON
@@ -1095,6 +1095,16 @@ void parse_gps_buffer_as_gga()
   gps_siv  = gps_parse_buffer.substring(siv_start + 1, hdp_start);
   gps_hdp  = gps_parse_buffer.substring(hdp_start + 1, alt_start);
   gps_altitude  = gps_parse_buffer.substring(alt_start + 1, altu_start);
+  
+  //
+  //	Extra error checking here to make sure things are valid
+  //
+  
+  if(gps_altitude.length() < 1 ||
+     gps_hdp.length() < 1)
+  {
+    gps_valid = false;
+  }
   
 }
 
