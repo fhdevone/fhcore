@@ -1459,43 +1459,48 @@ void pop_off_detailed_message()
   latest_message_to_send += float_hub_id;
   latest_message_to_send += ":";
   latest_message_to_send += FLOATHUB_PROTOCOL_VERSION;
-  latest_message_to_send += "$,U:";
+  latest_message_to_send += "$";
   
-  //
-  //  Reconstitute date time string
-  //
+  if(year(an_unsigned_long) > 2010)
+  {
+    latest_message_to_send += ",U:";
   
-  handy = hour(an_unsigned_long);
-  if(handy < 10)
-  {
-     latest_message_to_send += "0";
+    //
+    //  Reconstitute date time string
+    //
+  
+    handy = hour(an_unsigned_long);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+    handy = minute(an_unsigned_long);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+    handy = second(an_unsigned_long);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+    handy = day(an_unsigned_long);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+    handy = month(an_unsigned_long);
+    if(handy < 10)
+    {
+      latest_message_to_send += "0";
+    }
+    latest_message_to_send += handy;
+    latest_message_to_send += year(an_unsigned_long);
   }
-  latest_message_to_send += handy;
-  handy = minute(an_unsigned_long);
-  if(handy < 10)
-  {
-     latest_message_to_send += "0";
-  }
-  latest_message_to_send += handy;
-  handy = second(an_unsigned_long);
-  if(handy < 10)
-  {
-     latest_message_to_send += "0";
-  }
-  latest_message_to_send += handy;
-  handy = day(an_unsigned_long);
-  if(handy < 10)
-  {
-     latest_message_to_send += "0";
-  }
-  latest_message_to_send += handy;
-  handy = month(an_unsigned_long);
-  if(handy < 10)
-  {
-     latest_message_to_send += "0";
-  }
-  latest_message_to_send += handy;
-  latest_message_to_send += year(an_unsigned_long);
   
   //
   //  temperature
@@ -3095,7 +3100,7 @@ void loop()
       Obviously this is main execution loop. There are a number of values we read and actions we take base on timing
   */
    
-  unsigned long current_timestamp = millis();
+  unsigned long current_timestamp = millis() + idle_reporting_interval;
  
   if(current_timestamp - sensor_previous_timestamp >  sensor_sample_interval)
   {
